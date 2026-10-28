@@ -750,6 +750,13 @@ async function uiSelfTest() {
     return "已恢复原状";
   });
 
+  t("关窗说明可见", () => {
+    const hint = $("trayHint");
+    if (!hint) throw new Error("设置里没有关窗行为说明");
+    if (!hint.textContent.includes("重启")) throw new Error("说明里没提重启生效");
+    return hint.textContent.trim();
+  });
+
   t("名字相关文案不提机器人", () => {
     const s = document.querySelector("#settingsPop").textContent || "";
     const u = document.querySelector("#setupOverlay").textContent || "";

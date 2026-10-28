@@ -495,6 +495,13 @@ def main() -> None:
         server.shutdown()
         clear_instance()
         log("已退出")
+        # 关窗就结束：不等守护线程，直接退出，避免残留进程
+        try:
+            sys.stdout.flush()
+            sys.stderr.flush()
+        except Exception:
+            pass
+        os._exit(0)
 
 
 if __name__ == "__main__":
