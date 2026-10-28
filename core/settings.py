@@ -11,8 +11,12 @@ BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DATA_DIR = os.environ.get("ZZYANG_DATA_HOME") or os.path.join(BASE, "data")
 PATH = os.path.join(DATA_DIR, "settings.json")
 
+THEMES = ("xuantan", "black", "white")
+
 DEFAULTS = {
     "bot_root": "",
+    "theme": "xuantan",
+    "transparent": True,
     "refresh_seconds": 30,
     "active_minutes": 30,
     "quiet_minutes": 90,
@@ -37,6 +41,14 @@ def _sanitize(raw: dict) -> dict:
     root = raw.get("bot_root")
     if isinstance(root, str):
         out["bot_root"] = root.strip()[:260]
+
+    theme = raw.get("theme")
+    if isinstance(theme, str) and theme in THEMES:
+        out["theme"] = theme
+
+    tr = raw.get("transparent")
+    if isinstance(tr, bool):
+        out["transparent"] = tr
 
     for key, (lo, hi) in LIMITS.items():
         if key not in raw:

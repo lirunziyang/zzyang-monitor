@@ -27,7 +27,49 @@ namespace Zzyang
 
         private delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam);
 
+        [DllImport("dwmapi.dll")]
+        private static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int value, int size);
+
+        [DllImport("dwmapi.dll")]
+        private static extern int DwmExtendFrameIntoClientArea(IntPtr hwnd, ref MARGINS margins);
+
+        [DllImport("user32.dll")]
+        private static extern int SetWindowCompositionAttribute(IntPtr hwnd, ref WINCOMPDATA data);
+
+        [StructLayout(LayoutKind.Sequential)]
+        private struct MARGINS { public int Left, Right, Top, Bottom; }
+
+        [StructLayout(LayoutKind.Sequential)]
+        private struct ACCENTPOLICY
+        {
+            public int AccentState;
+            public int AccentFlags;
+            public int GradientColor;
+            public int AnimationId;
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        private struct WINCOMPDATA
+        {
+            public int Attribute;
+            public IntPtr Data;
+            public int SizeOfData;
+        }
+
         private const int SW_RESTORE = 9;
+
+        /// 让窗口背后透出桌面（Win11 用系统亚克力，Win10 用 ACCENT 回退）
+        private static void EnableGlass(Form form)
+        {
+            try
+            {
+                IntPtr hwnd = form.Handle;
+                int dark = 1;
+                DwmSetWindowAttribute(hwnd, 20, ref dark, sizeof(int));   // 深色标题栏
+                // 只做深色标题栏；窗口本身保持不透明，避免 WebView2 透明背景导致渲染空白
+            }
+            catch (Exception) { }
+        }
         private const int EXIT_ALREADY_RUNNING = 42;
 
         private static string PidFile(string dataDir)
@@ -120,7 +162,7 @@ namespace Zzyang
 
             Form form = new Form();
             form.Text = "大肥鱼监测";
-            form.BackColor = Color.FromArgb(19, 21, 25);
+            form.BackColor = Color.FromArgb(10, 12, 14);
             form.StartPosition = FormStartPosition.CenterScreen;
             form.Width = 1240;
             form.Height = 860;
@@ -247,6 +289,7 @@ namespace Zzyang
                 }
             };
 
+            // form.Shown += delegate { EnableGlass(form); };
             Application.Run(form);        }
     }
 }

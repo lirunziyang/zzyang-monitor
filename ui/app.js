@@ -82,6 +82,10 @@ async function load(manual = false) {
     if (conf.page_size && !state.limit) state.limit = conf.page_size;
     if (conf.page_size) state.pageSize = conf.page_size;
     state.refreshSeconds = conf.refresh_seconds || 30;
+    if (!state.themeInit && conf.theme) {
+      applyTheme(conf.theme, conf.transparent !== false);
+      state.themeInit = true;
+    }
 
     const sig = JSON.stringify([snap.journal.map((e) => e.id), Object.keys(state.stars).sort()]);
     const changed = sig !== state.sig;
@@ -101,6 +105,41 @@ async function load(manual = false) {
 function scheduleRefresh() {
   if (state.timer) clearInterval(state.timer);
   state.timer = setInterval(() => load(false), Math.max(5, state.refreshSeconds) * 1000);
+}
+
+/* ---------------- 主题 ---------------- */
+const THEMES = ["xuantan", "black", "white"];
+
+function currentTheme() {
+  return document.documentElement.dataset.theme || "xuantan";
+}
+
+function applyTheme(theme, transparent) {
+  if (!THEMES.includes(theme)) theme = "xuantan";
+  document.documentElement.dataset.theme = theme;
+  document.documentElement.dataset.transparent = transparent ? "on" : "off";
+  try {
+    localStorage.setItem("theme", theme);
+    localStorage.setItem("transparent", transparent ? "on" : "off");
+  } catch (e) {}
+  document.querySelectorAll("#themeGrid .theme-card").forEach((b) => {
+    b.classList.toggle("active", b.dataset.pick === theme);
+  });
+  const sw = $("switchTransparent");
+  if (sw) sw.classList.toggle("on", !!transparent);
+  state.theme = theme;
+  state.transparent = !!transparent;
+}
+
+async function saveTheme(theme, transparent) {
+  applyTheme(theme, transparent);
+  try {
+    await fetch("/api/theme", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ theme: theme, transparent: transparent }),
+    });
+  } catch (e) {}
 }
 
 /* ---------------- 外壳 ---------------- */
@@ -678,6 +717,47 @@ async function uiSelfTest() {
     return "已恢复原状";
   });
 
+  t("设置面板可打开", () => {
+    $("btnSettings").click();
+    if ($("settingsPop").classList.contains("hidden")) throw new Error("点了设置没打开");
+    const cards = document.querySelectorAll("#themeGrid .theme-card").length;
+    if (cards !== 3) throw new Error("主题选项数量不对：" + cards);
+    $("btnSettings").click();
+    return cards + " 个主题";
+  });
+
+  t("切换到纯白生效", () => {
+    applyTheme("white", true);
+    const canvas = getComputedStyle(document.documentElement).getPropertyValue("--canvas").trim();
+    if (document.documentElement.dataset.theme !== "white") throw new Error("主题属性没变");
+    if (canvas !== "#f2f4f7") throw new Error("浅色底没生效：" + canvas);
+    return canvas;
+  });
+
+  t("切回玄潭黑生效", () => {
+    applyTheme("xuantan", true);
+    const canvas = getComputedStyle(document.documentElement).getPropertyValue("--canvas").trim();
+    if (!document.documentElement.dataset.theme.startsWith("xuantan")) throw new Error("没切回玄潭黑");
+    if (!canvas.includes("rgba")) throw new Error("透明底不是 rgba：" + canvas);
+    return canvas;
+  });
+
+  t("透明质感（半透明 + 模糊）", () => {
+    const root = getComputedStyle(document.documentElement);
+    const glass = root.getPropertyValue("--glass-2").trim();
+    const m = glass.match(/rgba?\(([^)]+)\)/);
+    const parts = m ? m[1].split(",").map((x) => parseFloat(x)) : [];
+    const alpha = parts.length === 4 ? parts[3] : 1;
+    if (!(alpha > 0 && alpha < 1)) throw new Error("面板不是半透明：" + glass);
+    const card = document.querySelector(".card");
+    if (!card) throw new Error("找不到卡片");
+    const cs = getComputedStyle(card);
+    const bf = cs.backdropFilter || cs.webkitBackdropFilter;
+    if (!bf || bf === "none") throw new Error("没有背景模糊");
+    if (!/blur\(/.test(bf)) throw new Error("模糊值异常：" + bf);
+    return "alpha=" + alpha + " · " + bf;
+  });
+
   state.query = prevQuery;
   $("search").value = prevQuery;
   setView(prevView);
@@ -826,6 +906,32 @@ function bind() {
 
   $("diagClose").addEventListener("click", () => $("diagOverlay").classList.add("hidden"));
 
+  // 左下角设置：主题与透明
+  const closeSettings = () => {
+    $("settingsPop").classList.add("hidden");
+    $("btnSettings").classList.remove("open");
+  };
+  $("btnSettings").addEventListener("click", (ev) => {
+    ev.stopPropagation();
+    const willOpen = $("settingsPop").classList.contains("hidden");
+    $("settingsPop").classList.toggle("hidden", !willOpen);
+    $("btnSettings").classList.toggle("open", willOpen);
+  });
+  $("themeGrid").addEventListener("click", (ev) => {
+    const card = ev.target.closest("[data-pick]");
+    if (!card) return;
+    saveTheme(card.dataset.pick, $("switchTransparent").classList.contains("on"));
+  });
+  $("switchTransparent").addEventListener("click", (ev) => {
+    ev.stopPropagation();
+    saveTheme(currentTheme(), !$("switchTransparent").classList.contains("on"));
+  });
+  document.addEventListener("click", (ev) => {
+    if ($("settingsPop").classList.contains("hidden")) return;
+    if (ev.target.closest("#settingsPop") || ev.target.closest("#btnSettings")) return;
+    closeSettings();
+  });
+
   // 首次运行：设置监测目录
   const doSetup = async () => {
     const p = $("setupPath").value.trim();
@@ -884,6 +990,8 @@ function bind() {
     const typing = ev.target && (ev.target.tagName === "INPUT" || ev.target.tagName === "TEXTAREA");
 
     if (ev.key === "Escape") {
+      $("settingsPop").classList.add("hidden");
+      $("btnSettings").classList.remove("open");
       $("overlay").classList.add("hidden");
       $("diagOverlay").classList.add("hidden");
       $("calpop").classList.add("hidden");

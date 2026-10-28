@@ -5,6 +5,13 @@
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>子漾监测</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='16' fill='%23c08f4d'/%3E%3Ctext x='32' y='44' font-size='34' text-anchor='middle' fill='%23241d12' font-family='serif'%3E漾%3C/text%3E%3C/svg%3E" />
+<script>
+  try {
+    var _t = localStorage.getItem("theme") || "xuantan";
+    document.documentElement.dataset.theme = _t;
+    document.documentElement.dataset.transparent = localStorage.getItem("transparent") || "on";
+  } catch (e) {}
+</script>
 <link rel="stylesheet" href="style.css" />
 </head>
 <body>
@@ -29,6 +36,36 @@
         <span class="nic">忆</span><span>记忆档案</span>
       </button>
     </nav>
+
+    <div class="settings-wrap">
+      <button class="settings-btn" id="btnSettings" aria-haspopup="true">
+        <span class="gear">⚙</span><span>设置</span><span class="chev">▾</span>
+      </button>
+      <div class="settings-pop hidden" id="settingsPop">
+        <div class="p-title">主题</div>
+        <div class="theme-grid" id="themeGrid">
+          <button class="theme-card active" data-pick="xuantan">
+            <span class="swatch xuantan"></span>
+            <span class="t-text"><span class="t-name">玄潭黑</span><span class="t-desc">透明质感 · 默认</span></span>
+            <span class="tick">✓</span>
+          </button>
+          <button class="theme-card" data-pick="black">
+            <span class="swatch black"></span>
+            <span class="t-text"><span class="t-name">纯黑</span><span class="t-desc">不透明 · 高对比</span></span>
+            <span class="tick">✓</span>
+          </button>
+          <button class="theme-card" data-pick="white">
+            <span class="swatch white"></span>
+            <span class="t-text"><span class="t-name">纯白</span><span class="t-desc">浅色 · 白天用</span></span>
+            <span class="tick">✓</span>
+          </button>
+        </div>
+        <div class="set-row">
+          <span>透明质感</span>
+          <button class="switch" id="switchTransparent" aria-label="透明质感"></button>
+        </div>
+      </div>
+    </div>
 
     <div class="side-foot">
       <div class="runrow"><span class="dot" id="runDot"></span><span id="runText">检测中…</span></div>

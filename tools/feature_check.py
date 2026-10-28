@@ -266,7 +266,75 @@ def f_diag_and_instance():
     return "诊断字段完整、单实例检测（活/死）正确"
 
 
+def f_theme_persist():
+    """主题：能保存、能读回、非法值被拒。"""
+    root_a = build_root("theme_a")
+    write_db(root_a, {"甲.txt": (100, "2026-10-27 10:00")})
+    home = os.path.join(TMP, "home_theme")
+    os.makedirs(home, exist_ok=True)
+
+    env = dict(os.environ)
+    env["ZZYANG_DATA_ROOT"] = root_a
+    env["ZZYANG_DATA_HOME"] = home
+    env["PYTHONIOENCODING"] = "utf-8"
+
+    proc = subprocess.Popen(
+        [PY, APP, "--serve"], cwd=BASE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+        text=True, encoding="utf-8", errors="replace", bufsize=1, env=env,
+    )
+    try:
+        url = None
+        end = time.time() + 15
+        while time.time() < end and url is None:
+            line = proc.stdout.readline()
+            if line and line.strip().startswith("http://"):
+                url = line.strip()
+        assert_(url, "服务未启动")
+
+        def get():
+            with urllib.request.urlopen(url + "api/snapshot", timeout=10) as r:
+                return json.loads(r.read())
+
+        def post(path, payload, allow_error=False):
+            req = urllib.request.Request(
+                url + path, data=json.dumps(payload).encode("utf-8"),
+                headers={"Content-Type": "application/json"}, method="POST",
+            )
+            try:
+                with urllib.request.urlopen(req, timeout=10) as r:
+                    return json.loads(r.read())
+            except urllib.error.HTTPError as e:
+                if not allow_error:
+                    raise
+                return json.loads(e.read())
+
+        snap = get()
+        assert_(snap["settings"].get("theme") in ("xuantan", "black", "white"), "默认主题不合法")
+
+        for theme in ("white", "black", "xuantan"):
+            r = post("api/theme", {"theme": theme})
+            assert_(r.get("ok") is True, f"切换 {theme} 失败：{r}")
+            assert_(get()["settings"]["theme"] == theme, f"{theme} 没落到快照里")
+
+        bad = post("api/theme", {"theme": "rainbow"}, allow_error=True)
+        assert_(bad.get("ok") is False, "非法主题应该被拒绝")
+
+        cfg = os.path.join(home, "settings.json")
+        with open(cfg, "r", encoding="utf-8") as f:
+            saved = json.load(f)
+        assert_(saved.get("theme") == "xuantan", f"设置文件里的主题不对：{saved.get('theme')}")
+    finally:
+        proc.terminate()
+        try:
+            proc.wait(timeout=8)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+
+    return "三套主题可切换并持久化，非法值被拒"
+
+
 def f_setup_flow():
+
     """首次运行指定目录：能保存、能切换、认不出来的路径要拒绝。"""
     root_a = build_root("setup_a")
     write_db(root_a, {"甲.txt": (100, "2026-10-27 10:00")})
@@ -370,6 +438,7 @@ CASES = [
     ("F-04 多本书", f_multiple_books),
     ("F-05 诊断与单实例", f_diag_and_instance),
     ("F-06 首次设置路径", f_setup_flow),
+    ("F-07 主题持久化", f_theme_persist),
 ]
 
 

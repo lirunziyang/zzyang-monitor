@@ -105,6 +105,24 @@ class Handler(SimpleHTTPRequestHandler):
         return super().do_GET()
 
     def do_POST(self):
+        if self.path.startswith("/api/theme"):
+            try:
+                length = int(self.headers.get("Content-Length") or 0)
+                payload = json.loads(self.rfile.read(length) or b"{}")
+                theme = str(payload.get("theme", "")).strip()
+                if theme not in zzsettings.THEMES:
+                    return self._json({"ok": False, "error": "未知主题"}, 400)
+                conf = zzsettings.load()
+                conf.pop("_note", None)
+                conf["theme"] = theme
+                if isinstance(payload.get("transparent"), bool):
+                    conf["transparent"] = payload["transparent"]
+                zzsettings.save(conf)
+                zzsettings.reload()
+                log(f"主题已切换：{theme}")
+                return self._json({"ok": True, "theme": theme})
+            except Exception as e:
+                return self._json({"ok": False, "error": f"{type(e).__name__}: {e}"}, 500)
         if self.path.startswith("/api/setup"):
             try:
                 length = int(self.headers.get("Content-Length") or 0)
