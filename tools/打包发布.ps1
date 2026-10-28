@@ -11,7 +11,7 @@ $root = Split-Path -Parent $here
 if (-not $OutDir) { $OutDir = Join-Path $root 'release' }
 
 $version = (Get-Content (Join-Path $root 'VERSION') -Raw -Encoding UTF8).Trim()
-$name = "子漾监测-$version-win64"
+$name = "大肥鱼监测-$version-win64"
 $stage = Join-Path $OutDir $name
 $zipPath = Join-Path $OutDir "zzyang-monitor-$version-win64.zip"
 
@@ -43,7 +43,7 @@ New-Item -ItemType Directory -Force -Path $stage | Out-Null
 # 4. 复制内容
 $items = @(
     'app.py', 'VERSION', 'LICENSE', 'README.md', '使用说明.txt',
-    '子漾监测.vbs', '调试启动.bat',
+    '大肥鱼监测.vbs', '调试启动.bat',
     'core', 'ui', 'tools', 'host', 'vendor', 'runtime'
 )
 foreach ($item in $items) {
@@ -77,4 +77,4 @@ $files = (Get-ChildItem $stage -Recurse -File | Measure-Object).Count
 Write-Host ""
 Write-Host "完成：$zipPath" -ForegroundColor Green
 Write-Host "  版本 $version · $files 个文件 · 压缩后 $size MB"
-Write-Host "  解压后双击 子漾监测.vbs 即可运行"
+Write-Host "  解压后双击 大肥鱼监测.vbs 即可运行"

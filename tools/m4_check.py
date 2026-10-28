@@ -128,7 +128,7 @@ def h_docs():
     for m in ("M0", "M1", "M2", "M3", "M4"):
         assert_(m in plan, f"PLAN 缺少里程碑 {m}")
 
-    assert_("子漾监测.vbs" in readme, "README 没写怎么启动")
+    assert_("大肥鱼监测.vbs" in readme, "README 没写怎么启动")
     return "README/PRD/PLAN 关键内容齐全"
 
 

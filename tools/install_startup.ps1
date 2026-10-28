@@ -10,9 +10,9 @@ param(
 $ErrorActionPreference = 'Stop'
 
 $project = Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Path)
-$target  = Join-Path $project '子漾监测.vbs'
+$target  = Join-Path $project '大肥鱼监测.vbs'
 $startup = Join-Path $AppDataRoot 'Microsoft\Windows\Start Menu\Programs\Startup'
-$link    = Join-Path $startup '子漾监测.lnk'
+$link    = Join-Path $startup '大肥鱼监测.lnk'
 
 if ($Remove) {
     if (Test-Path $link) {
@@ -32,7 +32,7 @@ $sc = $shell.CreateShortcut($link)
 $sc.TargetPath = $target
 $sc.WorkingDirectory = $project
 $sc.WindowStyle = 7
-$sc.Description = '子漾监测（只读）'
+$sc.Description = '大肥鱼监测（只读）'
 $sc.Save()
 
 if (Test-Path $link) {

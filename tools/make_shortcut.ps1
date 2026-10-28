@@ -11,7 +11,7 @@ $ErrorActionPreference = 'Stop'
 
 $tools   = Split-Path -Parent $MyInvocation.MyCommand.Path
 $project = Split-Path -Parent $tools
-$target  = Join-Path $project '子漾监测.vbs'
+$target  = Join-Path $project '大肥鱼监测.vbs'
 $icon    = Join-Path $project 'host\app.ico'
 
 if (-not (Test-Path $target)) { throw "找不到启动文件：$target" }
@@ -22,7 +22,7 @@ $shell = New-Object -ComObject WScript.Shell
 
 foreach ($dir in $dirs) {
     if (-not $dir -or -not (Test-Path $dir)) { continue }
-    $link = Join-Path $dir '子漾监测.lnk'
+    $link = Join-Path $dir '大肥鱼监测.lnk'
 
     if ($Remove) {
         if (Test-Path $link) {
@@ -36,7 +36,7 @@ foreach ($dir in $dirs) {
     $sc.TargetPath = $target
     $sc.WorkingDirectory = $project
     $sc.WindowStyle = 7
-    $sc.Description = '子漾监测（只读）'
+    $sc.Description = '大肥鱼监测（只读）'
     if (Test-Path $icon) { $sc.IconLocation = "$icon,0" }
     $sc.Save()
 

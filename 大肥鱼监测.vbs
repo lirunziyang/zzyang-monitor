@@ -1,4 +1,4 @@
-' 子漾监测 —— 无控制台窗口启动
+' 大肥鱼监测 —— 无控制台窗口启动
 Option Explicit
 Dim sh, fso, here
 Set sh = CreateObject("WScript.Shell")

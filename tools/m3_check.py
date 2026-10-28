@@ -137,7 +137,7 @@ def g_memory():
 - 用户是大学生。
 
 【关系和重要节点】
-- 机器人名「润子漾」。
+- 机器人名「润大肥鱼」。
 """
     with open(os.path.join(root, "plugins/astrbot_plugin_edge_tts/data/memory_profile.md"), "w", encoding="utf-8") as f:
         f.write(md)

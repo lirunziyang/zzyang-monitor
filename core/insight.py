@@ -17,7 +17,7 @@ DATA_DIR = os.path.join(BASE, "data")
 VENDOR = os.path.join(BASE, "vendor")
 WORDS_FILE = os.path.join(DATA_DIR, "words.txt")
 
-FIXED_WORDS = ["子漾", "润子漾", "浩宇", "李浩宇", "长日将尽", "QQ空间", "语音", "日记本"]
+FIXED_WORDS = ["子漾", "润子漾", "大肥鱼", "浩宇", "李浩宇", "长日将尽", "QQ空间", "语音", "日记本"]
 
 STOP_WORDS = {
     "自己", "什么", "这个", "那个", "我们", "你们", "他们", "没有", "就是", "可以",

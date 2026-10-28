@@ -1,4 +1,4 @@
-﻿# 准备运行环境：把 Python 放进 runtime\，之后双击 子漾监测.vbs 就能用
+﻿# 准备运行环境：把 Python 放进 runtime\，之后双击 大肥鱼监测.vbs 就能用
 # 用法：powershell -ExecutionPolicy Bypass -File tools\setup_runtime.ps1
 #       （或者直接双击 tools\准备运行环境.bat）
 param(
@@ -145,7 +145,7 @@ if (-not $downloaded) {
     Say "自动下载失败（可能是网络或证书问题）。请手动处理：" 'Red'
     Say "  1. 用浏览器打开：$url"
     Say "  2. 把解压出来的所有文件放进：$target"
-    Say "  3. 再运行一次本脚本（或直接双击 子漾监测.vbs）"
+    Say "  3. 再运行一次本脚本（或直接双击 大肥鱼监测.vbs）"
     exit 1
 }
 
@@ -172,5 +172,5 @@ if ($LASTEXITCODE -ne 0) {
 
 Say ""
 Say "完成：运行环境已放进 $target" 'Green'
-Say "现在双击 子漾监测.vbs 即可启动。"
+Say "现在双击 大肥鱼监测.vbs 即可启动。"
 exit 0
