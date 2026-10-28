@@ -119,7 +119,7 @@ namespace Zzyang
             Application.SetCompatibleTextRenderingDefault(false);
 
             Form form = new Form();
-            form.Text = "子漾监测";
+            form.Text = "大肥鱼监测";
             form.BackColor = Color.FromArgb(19, 21, 25);
             form.StartPosition = FormStartPosition.CenterScreen;
             form.Width = 1240;
@@ -168,7 +168,7 @@ namespace Zzyang
             }
             catch (Exception ex)
             {
-                MessageBox.Show("窗口初始化失败：" + ex.Message, "子漾监测");
+                MessageBox.Show("窗口初始化失败：" + ex.Message, "大肥鱼监测");
                 return;
             }
 
@@ -188,7 +188,7 @@ namespace Zzyang
 
             NotifyIcon tray = new NotifyIcon();
             tray.Icon = form.Icon != null ? form.Icon : SystemIcons.Application;
-            tray.Text = "子漾监测";
+            tray.Text = "大肥鱼监测";
             tray.Visible = true;
 
             ContextMenuStrip menu = new ContextMenuStrip();
@@ -235,7 +235,7 @@ namespace Zzyang
                     try
                     {
                         File.WriteAllText(trayState, "hidden");
-                        tray.ShowBalloonTip(1500, "子漾监测", "仍在后台运行，双击托盘图标可以再打开。", ToolTipIcon.Info);
+                        tray.ShowBalloonTip(1500, "大肥鱼监测", "仍在后台运行，双击托盘图标可以再打开。", ToolTipIcon.Info);
                     }
                     catch (Exception) { }
                 }
