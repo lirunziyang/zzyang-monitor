@@ -249,7 +249,8 @@ function renderHome() {
     .map((x) => {
       const name = x.book.replace(/\.(txt|md)$/i, "");
       const cnt = x.sessions || 0;
-      const chars = Number(x.chars_read || 0).toLocaleString();
+      const charsNum = (x.total || 0) > 0 ? (x.pos || 0) : (x.chars_read || 0);
+      const chars = Number(charsNum).toLocaleString();
       const pct = x.percent || 0;
       const cls = x.book === r.book ? "bookrow active" : "bookrow";
       return (

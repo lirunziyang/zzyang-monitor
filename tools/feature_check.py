@@ -267,6 +267,30 @@ def f_diag_and_instance():
 
 
 
+def f_chars_follow_position():
+    """总览字数以进度为准：进度领先日记时，以进度数字为准。"""
+    root = build_root("poswin")
+    entries = [
+        ("2026-10-26 20:00", "（自己读了会儿书）《甲书.txt》第 0–1000 字，共 10000 字。", True),
+        ("2026-10-26 21:00", "（自己读了会儿书）《甲书.txt》第 1000–2000 字，共 10000 字。", True),
+    ]
+    jpath = os.path.join(root, "plugins/astrbot_plugin_edge_tts/data/journal.jsonl")
+    with open(jpath, "w", encoding="utf-8") as f:
+        for ts, content, auto in entries:
+            f.write(json.dumps({"time": ts, "content": content, "auto": auto}, ensure_ascii=False) + "\n")
+    write_db(root, {"甲书.txt": (5000, "2026-10-26 21:00")})
+    with open(os.path.join(root, "plugins/astrbot_plugin_edge_tts/data/books/甲书.txt"), "w", encoding="utf-8") as f:
+        f.write("字" * 10000)
+
+    snap = run_check(root)
+    st = snap["reading_stats"]
+    assert_(st["chars"] == 5000, f"总览字数应取进度 5000，实际 {st['chars']}")
+    assert_(st["sessions"] == 2, f"次数应来自日记 2，实际 {st['sessions']}")
+    book = snap["books"][0]
+    assert_(book["chars_read"] == 2000, f"日记字数应仍为 2000，实际 {book['chars_read']}")
+    assert_(book["pos"] == 5000, "进度不对")
+    return "进度 5000 优先，日记 2000 仍保留"
+
 def f_no_browser_fallback():
     """宿主正常退出时不能退回浏览器（否则会弹出一个 127.0.0.1 的窗口）。"""
     import importlib.util
@@ -658,6 +682,7 @@ CASES = [
     ("F-09 机器人名字", f_bot_name),
     ("F-10 关窗行为", f_close_pref),
     ("F-11 不回退浏览器", f_no_browser_fallback),
+    ("F-12 字数以进度为准", f_chars_follow_position),
 ]
 
 

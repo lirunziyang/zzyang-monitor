@@ -549,7 +549,12 @@ def build_snapshot() -> dict:
         "books": books,
         "reading_stats": {
             "sessions": sum(b.get("sessions", 0) for b in books),
-            "chars": sum(b.get("chars_read", 0) for b in books),
+            # 字数以进度为准（读到第几字），没有进度的书才回退到日记统计，
+            # 这样总览的数字永远和书架进度一致
+            "chars": sum(
+                (b.get("pos") or 0) if (b.get("total") or 0) > 0 else (b.get("chars_read") or 0)
+                for b in books
+            ),
             "books": len(books),
             "last_book": max(books, key=lambda x: x.get("last_session") or "")["book"] if books else "",
             "last_time": max((b.get("last_session") or "" for b in books), default=""),
