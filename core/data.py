@@ -245,6 +245,35 @@ def read_preferences() -> dict:
     return data
 
 
+READ_RE = re.compile(r"《(.+?)》\s*第\s*(\d+)\s*[–\-~—到]\s*(\d+)\s*字")
+
+
+def read_sessions(journal: list[dict]) -> dict:
+    """从日记里的读书记录，按书聚合：读了几次、累计多少字、首末时间。"""
+    stats: dict[str, dict] = {}
+    for e in journal:
+        if e.get("kind") != "read":
+            continue
+        m = READ_RE.search(e.get("content", ""))
+        if not m:
+            continue
+        book = m.group(1).strip()
+        start, end = int(m.group(2)), int(m.group(3))
+        s = stats.setdefault(
+            book,
+            {"book": book, "sessions": 0, "chars": 0, "first": "", "last": "", "last_ts": 0},
+        )
+        s["sessions"] += 1
+        s["chars"] += max(0, end - start)
+        ts = e.get("ts") or 0
+        if ts and ts >= s["last_ts"]:
+            s["last_ts"] = ts
+            s["last"] = e.get("time", "")
+        if not s["first"] or (e.get("time") or "") < s["first"]:
+            s["first"] = e.get("time", "")
+    return stats
+
+
 def read_reading_all(pref: dict | None = None) -> list[dict]:
     """所有在读的书，按最后翻页时间倒序。"""
     pref = pref if pref is not None else read_preferences()
@@ -379,6 +408,24 @@ def build_snapshot() -> dict:
     cfg = read_config()
     prefs, pmeta = read_preferences_detailed()
     books = read_reading_all(prefs)
+    sessions = read_sessions(journal)
+    for b in books:
+        s = sessions.get(b["book"]) or {}
+        b["sessions"] = s.get("sessions", 0)
+        b["chars_read"] = s.get("chars", 0)
+        b["first_session"] = s.get("first", "")
+        b["last_session"] = s.get("last", "")
+    # 只在日记里出现过、数据库里没有进度的书也列出来
+    known = {b["book"] for b in books}
+    for name, s in sessions.items():
+        if name in known:
+            continue
+        books.append({
+            "book": name, "pos": 0, "total": 0, "percent": 0.0,
+            "updated_at": s.get("last", ""), "sessions": s.get("sessions", 0),
+            "chars_read": s.get("chars", 0), "first_session": s.get("first", ""),
+            "last_session": s.get("last", ""),
+        })
     reading = books[0] if books else {}
     chat = read_chat_tail(pref=prefs)
     profile, profile_exists = read_profile_detailed()
@@ -500,6 +547,13 @@ def build_snapshot() -> dict:
             "updated_at": reading.get("updated_at", ""),
         },
         "books": books,
+        "reading_stats": {
+            "sessions": sum(b.get("sessions", 0) for b in books),
+            "chars": sum(b.get("chars_read", 0) for b in books),
+            "books": len(books),
+            "last_book": max(books, key=lambda x: x.get("last_session") or "")["book"] if books else "",
+            "last_time": max((b.get("last_session") or "" for b in books), default=""),
+        },
         "settings": {k: v for k, v in conf.items() if not k.startswith("_")},
         "chat": chat,
         "profile": profile,

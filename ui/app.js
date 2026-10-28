@@ -222,27 +222,34 @@ function renderHome() {
     $("bookBar").style.width = "0%";
   }
 
-  // 其他书（M1-T5）
-  const others = books.slice(1);
-  const more = $("bookMore");
-  if (others.length) {
-    more.classList.remove("hidden");
-    more.innerHTML =
-      `<button class="ghost" id="btnOtherBooks">还有 ${others.length} 本在读</button>` +
-      `<div class="booklist hidden" id="bookList">` +
-      others
-        .map(
-          (x) =>
-            `<div class="bookrow"><span>${esc(x.book.replace(/\.(txt|md)$/i, ""))}</span>` +
-            `<span>${Number(x.pos).toLocaleString()} / ${Number(x.total).toLocaleString()} · ${x.percent}%</span></div>`
-        )
-        .join("") +
-      `</div>`;
-    $("btnOtherBooks").addEventListener("click", () => $("bookList").classList.toggle("hidden"));
-  } else {
-    more.classList.add("hidden");
-    more.innerHTML = "";
-  }
+  // 阅读总览（合并到书架卡片顶部）
+  const stats = s.reading_stats || {};
+  $("rsSessions").textContent = stats.sessions || 0;
+  $("rsChars").textContent = Number(stats.chars || 0).toLocaleString();
+  $("rsBooks").textContent = stats.books || 0;
+  $("rsNote").textContent = stats.last_book
+    ? `最近在读《${stats.last_book.replace(/\.(txt|md)$/i, "")}》 · ${(stats.last_time || "").slice(5, 16)}`
+    : "";
+
+  // 每本书分开记录
+  const rows = $("bookRows");
+  rows.innerHTML = books
+    .map((x) => {
+      const name = x.book.replace(/\.(txt|md)$/i, "");
+      const cnt = x.sessions || 0;
+      const chars = Number(x.chars_read || 0).toLocaleString();
+      const pct = x.percent || 0;
+      const cls = x.book === r.book ? "bookrow active" : "bookrow";
+      return (
+        `<div class="${cls}">` +
+        `<span class="bname2">《${esc(name)}》</span>` +
+        `<span class="bpct">${pct}%</span>` +
+        `<span class="bmeta">读了 ${cnt} 次 · ${chars} 字</span>` +
+        `<span class="btime">${esc((x.last_session || x.updated_at || "").slice(5, 16))}</span>` +
+        `</div>`
+      );
+    })
+    .join("");
 
   const tl = $("timeline");
   const thisYear = String(new Date().getFullYear());
@@ -715,6 +722,16 @@ async function uiSelfTest() {
   t("星标已撤销", () => {
     if (state.stars[starResult]) throw new Error("星标没有取消");
     return "已恢复原状";
+  });
+
+  t("阅读总览渲染", () => {
+    const rows = document.querySelectorAll("#bookRows .bookrow").length;
+    const sessions = $("rsSessions").textContent.trim();
+    const chars = $("rsChars").textContent.trim();
+    if (!rows) throw new Error("没有按书分开的行");
+    if (!sessions || sessions === "0") throw new Error("累计次数为 0");
+    if (!chars || chars === "0") throw new Error("累计字数为 0");
+    return rows + " 本 · " + sessions + " 次 · " + chars + " 字";
   });
 
   t("设置面板可打开", () => {

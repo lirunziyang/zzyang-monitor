@@ -266,7 +266,44 @@ def f_diag_and_instance():
     return "诊断字段完整、单实例检测（活/死）正确"
 
 
+def f_reading_stats():
+    """书架：按书分开统计次数与字数，并给出合并总览。"""
+    root = build_root("reading")
+    entries = []
+    # A 书读 3 次，每次 1000 字
+    for i in range(3):
+        entries.append(
+            (f"2026-10-2{5+i} 20:00",
+             f"（自己读了会儿书）《甲书.txt》第 {i*1000}–{(i+1)*1000} 字，共 10000 字。", True)
+        )
+    # B 书读 1 次，500 字
+    entries.append(("2026-10-27 21:00", "（自己读了会儿书）《乙书.txt》第 0–500 字，共 5000 字。", True))
+    jpath = os.path.join(root, "plugins/astrbot_plugin_edge_tts/data/journal.jsonl")
+    with open(jpath, "w", encoding="utf-8") as f:
+        for ts, content, auto in entries:
+            f.write(json.dumps({"time": ts, "content": content, "auto": auto}, ensure_ascii=False) + "\n")
+    write_db(root, {"甲书.txt": (3000, "2026-10-27 20:00")})   # 只有甲书有进度
+    # 把甲书正文改成 10000 字，便于断言 30%
+    with open(os.path.join(root, "plugins/astrbot_plugin_edge_tts/data/books/甲书.txt"), "w", encoding="utf-8") as f:
+        f.write("字" * 10000)
+
+    snap = run_check(root)
+    st = snap["reading_stats"]
+    assert_(st["sessions"] == 4, f"总次数应为 4，实际 {st['sessions']}")
+    assert_(st["chars"] == 3500, f"总字数应为 3500，实际 {st['chars']}")
+    assert_(st["books"] == 2, f"应识别 2 本书，实际 {st['books']}")
+
+    by_name = {b["book"]: b for b in snap["books"]}
+    assert_("甲书.txt" in by_name and "乙书.txt" in by_name, f"书单不对：{list(by_name)}")
+    assert_(by_name["甲书.txt"]["sessions"] == 3, "甲书次数不对")
+    assert_(by_name["甲书.txt"]["chars_read"] == 3000, "甲书字数不对")
+    assert_(by_name["乙书.txt"]["sessions"] == 1, "只在日记里出现的书也要列出来")
+    assert_(by_name["甲书.txt"]["percent"] == 30.0, "甲书进度应为 30%")
+    return f"2 本 · 4 次 · 3500 字，乙书无进度也能列出"
+
+
 def f_theme_persist():
+
     """主题：能保存、能读回、非法值被拒。"""
     root_a = build_root("theme_a")
     write_db(root_a, {"甲.txt": (100, "2026-10-27 10:00")})
@@ -439,6 +476,7 @@ CASES = [
     ("F-05 诊断与单实例", f_diag_and_instance),
     ("F-06 首次设置路径", f_setup_flow),
     ("F-07 主题持久化", f_theme_persist),
+    ("F-08 阅读统计", f_reading_stats),
 ]
 
 
