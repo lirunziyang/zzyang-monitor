@@ -33,6 +33,7 @@ namespace Zzyang
         [DllImport("dwmapi.dll")]
         private static extern int DwmExtendFrameIntoClientArea(IntPtr hwnd, ref MARGINS margins);
 
+
         [DllImport("user32.dll")]
         private static extern int SetWindowCompositionAttribute(IntPtr hwnd, ref WINCOMPDATA data);
 
@@ -206,7 +207,10 @@ namespace Zzyang
                 string udf = Path.Combine(dataDir, "webview");
                 Directory.CreateDirectory(udf);
                 web.CreationProperties = new CoreWebView2CreationProperties();
+                // 关掉 GPU 合成：个别机器/驱动上 WebView2 会整块黑屏
+                web.CreationProperties.AdditionalBrowserArguments = "--disable-gpu --disable-gpu-compositing";
                 web.CreationProperties.UserDataFolder = udf;
+
                 web.Source = new Uri(url);
             }
             catch (Exception ex)
@@ -300,7 +304,34 @@ namespace Zzyang
                 }
             };
 
-            // form.Shown += delegate { EnableGlass(form); };
+            // 首帧重绘：个别机器上 WebView2 初始化后不刷新，窗口一片黑。
+            // 轻微改变客户区尺寸可以强制合成器重绘，这里在显示后连做两次兜底。
+            Action repaint = delegate
+            {
+                try
+                {
+                    int w = form.Width;
+                    form.Width = w + 1;
+                    form.Width = w;
+                    web.Invalidate(true);
+                }
+                catch (Exception) { }
+            };
+            form.Shown += delegate
+            {
+                // 显式激活，避免窗口虽显示但未成为前台，WebView2 不出帧
+                try { form.Activate(); form.BringToFront(); } catch (Exception) { }
+                // 后台等窗口合成完成，再回主线程轻推尺寸，强制 WebView2 出首帧
+                System.Threading.Tasks.Task.Run(delegate
+                {
+                    int[] delays = new int[] { 600, 1500, 3000 };
+                    foreach (int d in delays)
+                    {
+                        try { System.Threading.Thread.Sleep(d); } catch (Exception) { }
+                        try { form.BeginInvoke(new Action(repaint)); } catch (Exception) { }
+                    }
+                });
+            };
             Application.Run(form);        }
     }
 }
