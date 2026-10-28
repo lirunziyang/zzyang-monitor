@@ -32,54 +32,56 @@
 [data-theme="xuantan"] {
   color-scheme: dark;
 
-  --canvas: rgba(14, 18, 22, 0.38);
-  --canvas-2: rgba(20, 26, 31, 0.22);
+  --canvas: rgba(19, 23, 28, 0.34);
+  --canvas-solid: #101418;
+  --canvas-2: rgba(26, 31, 37, 0.20);
 
-  --glass-1: rgba(255, 255, 255, 0.055);
-  --glass-2: rgba(255, 255, 255, 0.080);
-  --glass-3: rgba(255, 255, 255, 0.115);
-  --glass-sunk: rgba(0, 0, 0, 0.22);
+  --glass-1: rgba(255, 255, 255, 0.045);
+  --glass-2: rgba(255, 255, 255, 0.066);
+  --glass-3: rgba(255, 255, 255, 0.095);
+  --glass-sunk: rgba(0, 0, 0, 0.18);
 
-  --stroke: rgba(255, 255, 255, 0.095);
-  --stroke-strong: rgba(255, 255, 255, 0.16);
+  --stroke: rgba(255, 255, 255, 0.075);
+  --stroke-strong: rgba(255, 255, 255, 0.13);
 
-  --text: #eef1f3;
-  --text-2: rgba(238, 241, 243, 0.76);
-  --text-3: rgba(238, 241, 243, 0.52);
+  --text: #e9edf0;
+  --text-2: rgba(233, 237, 240, 0.74);
+  --text-3: rgba(233, 237, 240, 0.50);
 
-  --accent: #3ecf8e;
+  --accent: #49c99b;
   --accent-ink: #04231a;
-  --accent-soft: rgba(62, 207, 142, 0.14);
-  --accent-line: rgba(62, 207, 142, 0.34);
+  --accent-soft: rgba(73, 201, 155, 0.12);
+  --accent-line: rgba(73, 201, 155, 0.28);
 
-  --warm: #d8b273;
-  --warm-soft: rgba(216, 178, 115, 0.14);
+  --warm: #cfae82;
+  --warm-soft: rgba(207, 174, 130, 0.12);
 
-  --shadow-1: 0 8px 22px rgba(0, 0, 0, 0.28);
-  --shadow-2: 0 26px 70px rgba(0, 0, 0, 0.50);
+  --shadow-1: 0 10px 26px rgba(0, 0, 0, 0.22);
+  --shadow-2: 0 28px 72px rgba(0, 0, 0, 0.44);
 
-  --blur: 26px;
-  --blur-strong: 40px;
-  --sat: 150%;
+  --blur: 30px;
+  --blur-strong: 44px;
+  --sat: 135%;
 
-  --glow-a: rgba(62, 207, 142, 0.16);
-  --glow-b: rgba(84, 118, 200, 0.12);
+  --glow-a: rgba(73, 201, 155, 0.11);
+  --glow-b: rgba(90, 120, 190, 0.09);
 }
 
 /* ---------- 纯黑 · 不透明 ---------- */
 [data-theme="black"] {
   color-scheme: dark;
 
-  --canvas: #0a0c0e;
-  --canvas-2: #0c0f12;
+  --canvas: #030405;
+  --canvas-solid: #030405;
+  --canvas-2: #060809;
 
-  --glass-1: rgba(255, 255, 255, 0.045);
-  --glass-2: rgba(255, 255, 255, 0.07);
-  --glass-3: rgba(255, 255, 255, 0.10);
-  --glass-sunk: rgba(0, 0, 0, 0.30);
+  --glass-1: rgba(255, 255, 255, 0.028);
+  --glass-2: rgba(255, 255, 255, 0.044);
+  --glass-3: rgba(255, 255, 255, 0.066);
+  --glass-sunk: rgba(0, 0, 0, 0.42);
 
-  --stroke: rgba(255, 255, 255, 0.08);
-  --stroke-strong: rgba(255, 255, 255, 0.15);
+  --stroke: rgba(255, 255, 255, 0.065);
+  --stroke-strong: rgba(255, 255, 255, 0.12);
 
   --text: #f0f2f4;
   --text-2: rgba(240, 242, 244, 0.66);
@@ -108,22 +110,23 @@
 [data-theme="white"] {
   color-scheme: light;
 
-  --canvas: #f2f4f7;
-  --canvas-2: #eceff3;
+  --canvas: #e7eaee;
+  --canvas-solid: #e7eaee;
+  --canvas-2: #e2e6ea;
 
-  --glass-1: rgba(255, 255, 255, 0.72);
-  --glass-2: rgba(255, 255, 255, 0.86);
-  --glass-3: rgba(255, 255, 255, 0.96);
-  --glass-sunk: rgba(16, 20, 26, 0.04);
+  --glass-1: rgba(255, 255, 255, 0.58);
+  --glass-2: rgba(255, 255, 255, 0.74);
+  --glass-3: rgba(255, 255, 255, 0.88);
+  --glass-sunk: rgba(16, 20, 26, 0.05);
 
-  --stroke: rgba(16, 20, 26, 0.08);
-  --stroke-strong: rgba(16, 20, 26, 0.16);
+  --stroke: rgba(16, 20, 26, 0.09);
+  --stroke-strong: rgba(16, 20, 26, 0.18);
 
-  --text: #12161c;
-  --text-2: rgba(18, 22, 28, 0.62);
-  --text-3: rgba(18, 22, 28, 0.40);
+  --text: #1c2229;
+  --text-2: rgba(28, 34, 41, 0.66);
+  --text-3: rgba(28, 34, 41, 0.45);
 
-  --accent: #0a9c66;
+  --accent: #0c8b5d;
   --accent-ink: #ffffff;
   --accent-soft: rgba(10, 156, 102, 0.10);
   --accent-line: rgba(10, 156, 102, 0.28);
@@ -131,20 +134,21 @@
   --warm: #b07b2e;
   --warm-soft: rgba(176, 123, 46, 0.12);
 
-  --shadow-1: 0 4px 14px rgba(16, 24, 40, 0.08);
+  --shadow-1: 0 4px 16px rgba(20, 28, 40, 0.07);
   --shadow-2: 0 24px 60px rgba(16, 24, 40, 0.16);
 
   --blur: 22px;
   --blur-strong: 34px;
   --sat: 130%;
 
-  --glow-a: rgba(10, 156, 102, 0.07);
+  --glow-a: rgba(12, 139, 93, 0.05);
   --glow-b: rgba(70, 110, 200, 0.05);
 }
 
 /* 关闭「透明」时，玄潭黑也变成实色 */
 [data-transparent="off"][data-theme="xuantan"] {
   --canvas: #0b0e11;
+  --canvas-solid: #0b0e11;
   --canvas-2: #0d1114;
   --glass-1: rgba(255, 255, 255, 0.045);
   --glass-2: rgba(255, 255, 255, 0.068);
@@ -167,11 +171,12 @@ html, body {
 }
 
 body {
+  /* 最后一层是不透明底色：WebView2 对半透明根背景的合成会整块变黑 */
   background:
     radial-gradient(900px 520px at 88% -10%, var(--glow-a), transparent 62%),
     radial-gradient(760px 480px at 4% 108%, var(--glow-b), transparent 62%),
-    linear-gradient(168deg, var(--canvas-2), var(--canvas));
-  background-attachment: fixed;
+    linear-gradient(168deg, var(--canvas-2), var(--canvas)),
+    var(--canvas-solid);
 }
 
 .hidden { display: none !important; }

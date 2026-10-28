@@ -802,8 +802,28 @@ async function uiSelfTest() {
     applyTheme("white", true);
     const canvas = getComputedStyle(document.documentElement).getPropertyValue("--canvas").trim();
     if (document.documentElement.dataset.theme !== "white") throw new Error("主题属性没变");
-    if (canvas !== "#f2f4f7") throw new Error("浅色底没生效：" + canvas);
-    return canvas;
+    const m = canvas.match(/^#([0-9a-f]{6})$/i);
+    if (!m) throw new Error("浅色底不是实色：" + canvas);
+    const r = parseInt(m[1].slice(0, 2), 16);
+    const g = parseInt(m[1].slice(2, 4), 16);
+    const b = parseInt(m[1].slice(4, 6), 16);
+    const lum = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+    if (lum < 0.8) throw new Error("浅色底太暗：" + canvas);
+    if (lum > 0.95) throw new Error("浅色底太刺眼：" + canvas);
+    return canvas + " · 亮度 " + lum.toFixed(2);
+  });
+
+  t("三套主题彼此不同", () => {
+    const read = (name) => {
+      applyTheme(name, true);
+      return getComputedStyle(document.documentElement).getPropertyValue("--canvas").trim();
+    };
+    const a = read("xuantan");
+    const b = read("black");
+    const c = read("white");
+    applyTheme("xuantan", true);
+    if (a === b || b === c || a === c) throw new Error("主题底色重复：" + [a, b, c].join(" / "));
+    return [a, b, c].join(" / ");
   });
 
   t("切回玄潭黑生效", () => {
