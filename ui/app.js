@@ -150,7 +150,7 @@ function renderShell() {
   const b = s.bot;
 
   $("runDot").className = "dot " + (b.running ? "on" : "off");
-  $("runText").textContent = b.running ? "机器人在运行" : "机器人没在运行";
+  $("runText").textContent = b.running ? "正在运行" : "没在运行";
   $("sideState").textContent = b.state;
 
   const warns = s.warnings || [];
@@ -736,6 +736,15 @@ async function uiSelfTest() {
     return "已恢复原状";
   });
 
+  t("名字相关文案不提机器人", () => {
+    const s = document.querySelector("#settingsPop").textContent || "";
+    const u = document.querySelector("#setupOverlay").textContent || "";
+    if (s.includes("机器人")) throw new Error("设置面板里还有“机器人”");
+    if (u.includes("机器人")) throw new Error("首次设置里还有“机器人”");
+    if (!s.includes("他的名字")) throw new Error("设置面板没写“他的名字”");
+    return "文案干净";
+  });
+
   t("机器人名字生效", () => {
     if (!$("setupName")) throw new Error("首次设置里没有名字输入框");
     if (!$("nameInput")) throw new Error("设置面板里没有名字输入框");
@@ -1014,7 +1023,7 @@ function bind() {
     const pathVal = $("setupPath").value.trim();
     const needPath = !$("pathBlock").classList.contains("hidden");
     if (!name) {
-      $("setupMsg").textContent = "先给它起个名字";
+      $("setupMsg").textContent = "先给他起个名字";
       return;
     }
     if (needPath && !pathVal) {
