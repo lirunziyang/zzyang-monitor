@@ -13,7 +13,7 @@ if (-not $OutDir) { $OutDir = Join-Path $root 'release' }
 $version = (Get-Content (Join-Path $root 'VERSION') -Raw -Encoding UTF8).Trim()
 $name = "子漾监测-$version-win64"
 $stage = Join-Path $OutDir $name
-$zipPath = Join-Path $OutDir "$name.zip"
+$zipPath = Join-Path $OutDir "zzyang-monitor-$version-win64.zip"
 
 Write-Host "== 打包 $name ==" -ForegroundColor Cyan
 

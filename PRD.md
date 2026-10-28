@@ -260,7 +260,7 @@ VERSION            版本号
 
 | 角色 | 拿到什么 | 怎么跑 |
 |---|---|---|
-| 普通使用者 | Releases 里的 `子漾监测-x.y.z-win64.zip`（含 Python 运行时） | 解压 → 双击 `子漾监测.vbs` → 填一次数据目录 |
+| 普通使用者 | Releases 里的 `zzyang-monitor-x.y.z-win64.zip`（含 Python 运行时） | 解压 → 双击 `子漾监测.vbs` → 填一次数据目录 |
 | 从源码运行 | 克隆仓库 | `tools\准备运行环境.bat` 准备 `runtime\`，然后启动 |
 | 开发者 | 克隆仓库 | 改代码 → `host\build.ps1`（仅改窗口宿主时需要）→ `tools\打包发布.ps1` 出包 |
 
