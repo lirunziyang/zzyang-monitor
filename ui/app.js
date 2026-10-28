@@ -1,0 +1,975 @@
+const $ = (id) => document.getElementById(id);
+
+const state = {
+  snap: null,
+  view: "home",
+  filter: "feeling",
+  query: "",
+  starredOnly: false,
+  day: null,
+  openIds: new Set(),
+  stars: {},
+  sig: "",
+  loading: false,
+  limit: 0,
+  selected: null,
+  detailId: null,
+  timer: null,
+  refreshSeconds: 30,
+};
+
+const KIND_LABEL = {
+  self: "自己写的",
+  dialogue: "聊天时写的",
+  read: "读了会儿书",
+  message: "主动找你",
+  autocapture: "自动补记",
+};
+
+function esc(s) {
+  return String(s == null ? "" : s)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+function highlight(text, query) {
+  const safe = esc(text);
+  if (!query) return safe;
+  const q = esc(query).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  if (!q) return safe;
+  try {
+    return safe.replace(new RegExp(q, "gi"), (m) => `<mark>${m}</mark>`);
+  } catch (e) {
+    return safe;
+  }
+}
+
+async function getSnapshot() {
+  const r = await fetch("/api/snapshot", { cache: "no-store" });
+  return r.json();
+}
+
+async function getDiag() {
+  const r = await fetch("/api/diag", { cache: "no-store" });
+  return r.json();
+}
+
+async function postStar(payload) {
+  const r = await fetch("/api/star", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  return r.json();
+}
+
+/* ---------------- 数据 ---------------- */
+
+async function load(manual = false) {
+  if (state.loading) return;
+  state.loading = true;
+  try {
+    const snap = await getSnapshot();
+    if (!snap || !snap.ok) {
+      $("refreshInfo").textContent = "读取失败：" + ((snap && snap.error) || "未知错误");
+      return;
+    }
+    state.snap = snap;
+    state.stars = snap.stars || {};
+    const conf = snap.settings || {};
+    if (conf.page_size && !state.limit) state.limit = conf.page_size;
+    if (conf.page_size) state.pageSize = conf.page_size;
+    state.refreshSeconds = conf.refresh_seconds || 30;
+
+    const sig = JSON.stringify([snap.journal.map((e) => e.id), Object.keys(state.stars).sort()]);
+    const changed = sig !== state.sig;
+    state.sig = sig;
+    renderShell();
+    if (state.view === "home") renderHome();
+    else if (state.view === "memory") renderMemory();
+    if (state.view === "journal" && (changed || manual)) renderJournal();
+    $("refreshInfo").textContent = "更新于 " + new Date().toLocaleTimeString("zh-CN", { hour12: false });
+  } catch (e) {
+    $("refreshInfo").textContent = "连接不上程序";
+  } finally {
+    state.loading = false;
+  }
+}
+
+function scheduleRefresh() {
+  if (state.timer) clearInterval(state.timer);
+  state.timer = setInterval(() => load(false), Math.max(5, state.refreshSeconds) * 1000);
+}
+
+/* ---------------- 外壳 ---------------- */
+
+function renderShell() {
+  const s = state.snap;
+  if (!s) return;
+  const b = s.bot;
+
+  $("runDot").className = "dot " + (b.running ? "on" : "off");
+  $("runText").textContent = b.running ? "机器人在运行" : "机器人没在运行";
+  $("sideState").textContent = b.state;
+
+  const warns = s.warnings || [];
+  for (const id of ["warnHome", "warnJournal"]) {
+    const box = $(id);
+    if (warns.length) {
+      box.innerHTML = warns.map((w) => `<div>⚠ ${esc(w)}</div>`).join("");
+      box.classList.remove("hidden");
+    } else {
+      box.innerHTML = "";
+      box.classList.add("hidden");
+    }
+  }
+
+  const jn = s.journal.length;
+  $("jcount").textContent = jn ? jn : "";
+  $("srcInfo").textContent = "日记文件 " + (s.source.journal_mtime || "—");
+
+  // 还没指定监测目录：直接引导去设置
+  const setup = s.setup || {};
+  if (setup.needed) {
+    $("setupOverlay").classList.remove("hidden");
+    if (!$("setupPath").value && setup.bot_root && setup.source === "settings") {
+      $("setupPath").value = setup.bot_root;
+    }
+  } else {
+    $("setupOverlay").classList.add("hidden");
+  }
+
+  $("viewTitle").textContent = state.view === "home" ? "他现在在干什么" : state.view === "memory" ? "记忆档案" : "它写的日记";
+  if (state.view === "home") {
+    $("viewSub").textContent = "从它留下的痕迹推断，不是实时状态";
+  } else if (state.view === "memory") {
+    $("viewSub").textContent = "只读 · 它自己整理的那份记录";
+  } else {
+    const n = filtered().length;
+    if (state.query) $("viewSub").textContent = `找到 ${n} 条含「${state.query}」的记录`;
+    else $("viewSub").textContent = `只读展示，不修改它的任何记录 · 共 ${n} 条`;
+  }
+}
+
+/* ---------------- 概览 ---------------- */
+
+function renderHome() {
+  const s = state.snap;
+  const b = s.bot;
+  $("heroState").textContent = b.state;
+  $("heroHint").textContent = b.state_hint;
+  $("quietVal").textContent = b.quiet_text || "—";
+  $("lastMarkVal").textContent = b.last_mark ? b.last_mark.slice(11) : "—";
+
+  $("stJournal").textContent = s.today.journals;
+  $("stRead").textContent = s.today.reads;
+  $("stMsg").textContent = s.today.messages;
+
+  const r = s.reading || {};
+  const books = s.books || [];
+  if (r.book) {
+    $("bookName").textContent = r.book.replace(/\.(txt|md)$/i, "");
+    $("bookPos").textContent = `${Number(r.pos).toLocaleString()} / ${Number(r.total).toLocaleString()} 字`;
+    $("bookPct").textContent = r.percent + "%";
+    $("bookTime").textContent = "上次翻页 " + (r.updated_at || "").slice(0, 16);
+    $("bookBar").style.width = Math.max(1.5, r.percent) + "%";
+  } else {
+    $("bookName").textContent = "书架上还没有书";
+    $("bookPos").textContent = "—";
+    $("bookPct").textContent = "0%";
+    $("bookTime").textContent = "";
+    $("bookBar").style.width = "0%";
+  }
+
+  // 其他书（M1-T5）
+  const others = books.slice(1);
+  const more = $("bookMore");
+  if (others.length) {
+    more.classList.remove("hidden");
+    more.innerHTML =
+      `<button class="ghost" id="btnOtherBooks">还有 ${others.length} 本在读</button>` +
+      `<div class="booklist hidden" id="bookList">` +
+      others
+        .map(
+          (x) =>
+            `<div class="bookrow"><span>${esc(x.book.replace(/\.(txt|md)$/i, ""))}</span>` +
+            `<span>${Number(x.pos).toLocaleString()} / ${Number(x.total).toLocaleString()} · ${x.percent}%</span></div>`
+        )
+        .join("") +
+      `</div>`;
+    $("btnOtherBooks").addEventListener("click", () => $("bookList").classList.toggle("hidden"));
+  } else {
+    more.classList.add("hidden");
+    more.innerHTML = "";
+  }
+
+  const tl = $("timeline");
+  const thisYear = String(new Date().getFullYear());
+  tl.innerHTML = s.events
+    .map(
+      (e) => `
+      <div class="tlitem" data-kind="${e.kind}">
+        <div class="tltime"><span>${esc(e.date.slice(0, 4) === thisYear ? e.date.slice(5) : e.date)}</span><span>${esc(e.clock)}</span></div>
+        <div class="tlbody">
+          <div class="tlttl">${esc(e.title)}</div>
+          <div class="tldet">${esc(e.detail)}</div>
+        </div>
+      </div>`
+    )
+    .join("");
+  if (!s.events.length) tl.innerHTML = `<div class="empty">它还没留下任何记录。</div>`;
+
+  // 往年今天
+  const hist = s.history || [];
+  const hc = $("historyCard");
+  if (hist.length) {
+    hc.classList.remove("hidden");
+    $("historyList").innerHTML = hist
+      .map(
+        (e) => `<div class="hitem">
+          <div class="hdate">${esc(e.date.replace(/-/g, "."))}</div>
+          <div class="htext">${esc(e.content.slice(0, 90))}</div>
+        </div>`
+      )
+      .join("");
+  } else {
+    hc.classList.add("hidden");
+    $("historyList").innerHTML = "";
+  }
+
+  // 常提到的
+  const tp = s.topics || [];
+  const tc = $("topicCard");
+  if (tp.length) {
+    tc.classList.remove("hidden");
+    $("topicList").innerHTML = tp
+      .map((t) => `<button class="topic" data-word="${esc(t.word)}">${esc(t.word)}<i>${t.count}</i></button>`)
+      .join("");
+  } else {
+    tc.classList.add("hidden");
+    $("topicList").innerHTML = "";
+  }
+}
+
+/* ---------------- 记忆档案 ---------------- */
+
+function renderMemory() {
+  const m = (state.snap && state.snap.memory) || {};
+  const box = $("memSections");
+  if (!m.exists) {
+    $("memHint").textContent = "找不到记忆档案文件（它还没整理过，或路径变了）。";
+    $("memMeta").textContent = "";
+    box.innerHTML = "";
+    return;
+  }
+  $("memHint").textContent = "这是它自动整理的事实记录，只读展示，不是备忘录。";
+  $("memMeta").innerHTML = `${m.chars} 字<br>更新于 ${esc(m.updated_at || "—")}`;
+  box.innerHTML = (m.sections || [])
+    .map(
+      (sec) =>
+        `<div class="card memsec">
+          <div class="memtitle2">${esc(sec.title)}</div>
+          ${sec.lines.map((l) => `<div class="memline">${esc(l)}</div>`).join("")}
+        </div>`
+    )
+    .join("");
+}
+
+/* ---------------- 日记 ---------------- */
+
+function filtered() {
+  const s = state.snap;
+  if (!s) return [];
+  let list = s.journal;
+  if (state.filter === "feeling") list = list.filter((e) => e.kind === "self" || e.kind === "dialogue");
+  else if (state.filter === "self") list = list.filter((e) => e.kind === "self");
+  else if (state.filter === "dialogue") list = list.filter((e) => e.kind === "dialogue");
+  if (state.starredOnly) list = list.filter((e) => state.stars[e.id]);
+  if (state.day) list = list.filter((e) => e.date === state.day);
+  const q = state.query.trim().toLowerCase();
+  if (q) list = list.filter((e) => e.content.toLowerCase().includes(q));
+  return list;
+}
+
+function dayTitle(date) {
+  const today = new Date();
+  const ymd = (d) =>
+    `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  const y = new Date(today);
+  y.setDate(today.getDate() - 1);
+  const rel = date === ymd(today) ? "今天" : date === ymd(y) ? "昨天" : "";
+  const dt = new Date(date + "T00:00:00");
+  const week = "日一二三四五六"[dt.getDay()];
+  return { main: date.replace(/-/g, "."), rel: rel || `周${week}` };
+}
+
+function renderJournal() {
+  const all = filtered();
+  const limit = state.limit || all.length;
+  const list = all.slice(0, limit);
+  const box = $("jlist");
+  const now = Date.now() / 1000;
+
+  if (!all.length) {
+    box.innerHTML = "";
+    $("jempty").classList.remove("hidden");
+    $("jempty").textContent = state.starredOnly
+      ? "还没有标星的日记。点日记右下角的 ★ 就能留下。"
+      : state.query
+      ? "没有找到包含这几个字的日记。"
+      : "这里还没有符合条件的内容。";
+    return;
+  }
+  $("jempty").classList.add("hidden");
+
+  const groups = new Map();
+  for (const e of list) {
+    if (!groups.has(e.date)) groups.set(e.date, []);
+    groups.get(e.date).push(e);
+  }
+
+  let html = "";
+  for (const [date, items] of groups) {
+    const t = dayTitle(date);
+    html += `<div class="daygroup">
+      <div class="dayhead">
+        <span class="daydate">${esc(t.main)}</span>
+        <span class="dayrel">${esc(t.rel)}</span>
+        <span class="daycount">${items.length} 条</span>
+      </div>`;
+    for (const e of items) {
+      const fresh = now - e.ts < 600 ? " fresh" : "";
+      const open = state.openIds.has(e.id) ? " open" : "";
+      const starred = state.stars[e.id] ? " on" : "";
+      const sel = state.selected === e.id ? " selected" : "";
+      const longEnough = e.chars > 110;
+      html += `<article class="entry${fresh}${open}${sel}" data-id="${e.id}">
+        <div class="ehead">
+          <span class="etime">${esc(e.clock)}</span>
+          <span class="tag ${e.kind}">${KIND_LABEL[e.kind] || "记录"}</span>
+          ${e.duplicates > 1 ? `<span class="emore">原文里有 ${e.duplicates} 条相同</span>` : ""}
+          <button class="starbtn${starred}" data-star="${e.id}" title="标星（只存在本程序里）">★</button>
+        </div>
+        <div class="econtent" data-open="${e.id}">${highlight(e.content, state.query)}</div>
+        <div class="efoot">
+          <span class="emore">${e.chars} 字</span>
+          ${longEnough ? `<button class="ghost" data-expand="${e.id}">${state.openIds.has(e.id) ? "收起" : "展开全文"}</button>` : ""}
+        </div>
+      </article>`;
+    }
+    html += `</div>`;
+  }
+
+  if (all.length > limit) {
+    html += `<div class="morewrap"><button class="ghost" id="btnMore">再显示 ${Math.min(
+      state.pageSize || 60,
+      all.length - limit
+    )} 条（还有 ${all.length - limit} 条）</button></div>`;
+  }
+  box.innerHTML = html;
+  renderShell();
+
+  const more = $("btnMore");
+  if (more) {
+    more.addEventListener("click", () => {
+      state.limit = limit + (state.pageSize || 60);
+      renderJournal();
+    });
+  }
+}
+
+/* ---------------- 交互 ---------------- */
+
+function showDetail(id) {
+  const e = state.snap.journal.find((x) => x.id === id);
+  if (!e) return;
+  state.detailId = id;
+  $("dTime").textContent = e.time;
+  $("dKind").textContent = (KIND_LABEL[e.kind] || "记录") + (e.duplicates > 1 ? ` · 原文里出现 ${e.duplicates} 次` : "");
+  $("dBody").textContent = e.content;
+  $("dFoot").textContent = `${e.chars} 字 · 来源：journal.jsonl（只读）`;
+  const btn = $("dStar");
+  btn.textContent = state.stars[id] ? "★ 已标星" : "★ 标星";
+  btn.classList.toggle("on", !!state.stars[id]);
+
+  const st = state.stars[id];
+  const noteBox = $("dNoteBox");
+  if (st) {
+    noteBox.classList.remove("hidden");
+    $("dNote").value = st.note || "";
+    $("dNoteHint").textContent = st.starred_at ? `标星于 ${st.starred_at}` : "";
+  } else {
+    noteBox.classList.add("hidden");
+  }
+  $("overlay").classList.remove("hidden");
+}
+
+async function saveNote() {
+  if (!state.detailId) return;
+  const id = state.detailId;
+  try {
+    const r = await fetch("/api/note", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id, note: $("dNote").value }),
+    });
+    const data = await r.json();
+    if (data.ok) {
+      state.stars = data.stars || {};
+      $("dNoteHint").textContent = "已保存 " + new Date().toLocaleTimeString("zh-CN", { hour12: false });
+      renderJournal();
+    } else {
+      $("dNoteHint").textContent = data.error || "保存失败";
+    }
+  } catch (e) {
+    $("dNoteHint").textContent = "保存失败：" + e.message;
+  }
+}
+
+async function toggleStar(id) {
+  const e = state.snap.journal.find((x) => x.id === id);
+  if (!e) return;
+  try {
+    const r = await postStar({ id, time: e.time, preview: e.content.slice(0, 60) });
+    if (r && r.ok) {
+      state.stars = r.stars || {};
+      document.querySelectorAll(`[data-star="${id}"]`).forEach((b) => b.classList.toggle("on", !!state.stars[id]));
+      if (!$("overlay").classList.contains("hidden")) showDetail(id);
+      renderJournal();
+    }
+  } catch (e2) {}
+}
+
+function setView(v) {
+  state.view = v;
+  document.querySelectorAll(".navitem").forEach((b) => b.classList.toggle("active", b.dataset.view === v));
+  $("viewHome").classList.toggle("hidden", v !== "home");
+  $("viewJournal").classList.toggle("hidden", v !== "journal");
+  $("viewMemory").classList.toggle("hidden", v !== "memory");
+  renderShell();
+  if (v === "home") renderHome();
+  else if (v === "memory") renderMemory();
+  else renderJournal();
+}
+
+/* 日历 */
+const cal = { month: new Date() };
+
+function renderCal() {
+  const days = new Map();
+  (state.snap ? state.snap.journal : []).forEach((e) => days.set(e.date, (days.get(e.date) || 0) + 1));
+  const y = cal.month.getFullYear();
+  const m = cal.month.getMonth();
+  $("calTitle").textContent = `${y} 年 ${m + 1} 月`;
+  const first = new Date(y, m, 1);
+  const offset = (first.getDay() + 6) % 7;
+  const total = new Date(y, m + 1, 0).getDate();
+  const todayStr = new Date().toLocaleDateString("sv-SE");
+
+  let html = "";
+  for (let i = 0; i < offset; i++) html += `<div class="calday blank"></div>`;
+  for (let d = 1; d <= total; d++) {
+    const ds = `${y}-${String(m + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+    const cls = ["calday"];
+    if (days.has(ds)) cls.push("has");
+    if (state.day === ds) cls.push("sel");
+    if (ds === todayStr) cls.push("today");
+    html += `<div class="${cls.join(" ")}" ${days.has(ds) ? `data-day="${ds}"` : ""} title="${days.get(ds) || 0} 条">${d}</div>`;
+  }
+  $("calgrid").innerHTML = html;
+}
+
+function openCal(anchor) {
+  const pop = $("calpop");
+  const rect = anchor.getBoundingClientRect();
+  pop.classList.remove("hidden");
+  renderCal();
+  const w = 268;
+  pop.style.left = Math.min(window.innerWidth - w - 14, Math.max(14, rect.right - w)) + "px";
+  pop.style.top = rect.bottom + 8 + "px";
+}
+
+/* 诊断面板 */
+async function openDiag() {
+  $("diagOverlay").classList.remove("hidden");
+  $("diagBody").innerHTML = `<div class="dimg">读取中…</div>`;
+  try {
+    const d = await getDiag();
+    const rows = d.paths
+      .map(
+        (p) =>
+          `<tr><td>${esc(p.label)}</td><td class="${p.exists ? "ok" : "bad"}">${
+            p.exists ? "存在" : "缺失"
+          }</td><td class="mono">${esc(p.mtime || "—")}</td><td class="mono small">${esc(p.path)}</td></tr>`
+      )
+      .join("");
+    const log = (d.log || []).map((l) => `<div>${esc(l)}</div>`).join("") || "<div>（暂无日志）</div>";
+    $("diagBody").innerHTML = `
+      <div class="dsec">
+        <div class="dhead">概况</div>
+        <div class="dgrid">
+          <span>版本</span><b>${esc(d.version)}</b>
+          <span>启动于</span><b>${esc(d.started_at)}（已运行 ${d.uptime_sec}s）</b>
+          <span>Python</span><b>${esc(d.python)}</b>
+          <span>程序目录</span><b class="mono small">${esc(d.base)}</b>
+          <span>监测目标</span><b class="mono small">${esc(d.bot_root)}</b>
+          <span>请求次数</span><b>${d.hits}</b>
+        </div>
+      </div>
+      <div class="dsec">
+        <div class="dhead">数据文件</div>
+        <table class="dtable"><tbody>${rows}</tbody></table>
+      </div>
+      <div class="dsec">
+        <div class="dhead">当前设置</div>
+        <div class="dgrid">${Object.entries(d.settings || {})
+          .filter(([k]) => !k.startsWith("_"))
+          .map(([k, v]) => `<span>${esc(k)}</span><b>${esc(v)}</b>`)
+          .join("")}</div>
+      </div>
+      <div class="dsec">
+        <div class="dhead">监测目录</div>
+        <div class="dgrid">
+          <span>当前</span><b class="mono small">${esc(d.bot_root || "—")}</b>
+          <span>来源</span><b>${esc(d.root_source === "settings" ? "自己设置的" : d.root_source === "env" ? "环境变量" : "默认值")}</b>
+          <span>可用</span><b class="${d.root_usable ? "ok" : "bad"}">${d.root_usable ? "正常" : "找不到数据"}</b>
+        </div>
+        <button class="ghost" id="btnChangeRoot" style="margin-top:10px">更改路径</button>
+      </div>
+      <div class="dsec">
+        <div class="dhead">最近日志</div>
+        <div class="dlog">${log}</div>
+      </div>
+      <div class="dsec">
+        <div class="dhead">界面自检</div>
+        <button class="ghost" id="btnUiTest">运行界面自检</button>
+        <div id="uiTestResult" style="margin-top:10px"></div>
+      </div>`;
+    $("btnUiTest").addEventListener("click", renderUiTest);
+    const changer = $("btnChangeRoot");
+    if (changer) {
+      changer.addEventListener("click", () => {
+        $("diagOverlay").classList.add("hidden");
+        $("setupPath").value = (state.snap.setup || {}).bot_root || "";
+        $("setupMsg").textContent = "";
+        $("setupOverlay").classList.remove("hidden");
+        $("setupPath").focus();
+      });
+    }
+  } catch (e) {
+    $("diagBody").innerHTML = `<div class="dimg">读取失败：${esc(e.message)}</div>`;
+  }
+}
+
+/* 界面自检：真的派发按键/点击，检查结果 */
+async function uiSelfTest() {
+  const results = [];
+  const t = (name, fn) => {
+    try {
+      const detail = fn();
+      results.push({ name, ok: true, detail: detail || "" });
+    } catch (e) {
+      results.push({ name, ok: false, detail: String(e.message || e) });
+    }
+  };
+  const key = (k) => document.dispatchEvent(new KeyboardEvent("keydown", { key: k, bubbles: true }));
+
+  const prevView = state.view;
+  const prevQuery = state.query;
+
+  setView("journal");
+  state.selected = null;
+  state.query = "";
+  state.limit = state.pageSize || 60;
+  renderJournal();
+
+  t("列表已渲染", () => {
+    const n = document.querySelectorAll(".entry").length;
+    if (!n) throw new Error("没有渲染出任何条目");
+    return `${n} 条`;
+  });
+
+  t("J 选中下一条", () => {
+    key("j");
+    if (!state.selected) throw new Error("按下 J 后没有选中项");
+    if (!document.querySelector(".entry.selected")) throw new Error("没有 .selected 样式");
+    return state.selected;
+  });
+
+  t("K 回到上一条", () => {
+    const first = state.selected;
+    key("j");
+    key("k");
+    if (state.selected !== first) throw new Error("K 没有回到上一条");
+    return state.selected;
+  });
+
+  t("Enter 打开详情", () => {
+    key("Enter");
+    if ($("overlay").classList.contains("hidden")) throw new Error("详情没有打开");
+    const body = $("dBody").textContent;
+    if (!body) throw new Error("详情内容为空");
+    return body.slice(0, 18) + "…";
+  });
+
+  $("overlay").classList.add("hidden");
+
+  t("搜索高亮", () => {
+    const visible = filtered();
+    if (!visible.length) return "当前筛选下没有条目，跳过";
+    const sample = visible[0].content;
+    const start = Math.max(0, Math.floor(sample.length / 2) - 1);
+    const word = sample.slice(start, start + 2);
+    state.query = word;
+    renderJournal();
+    const marks = document.querySelectorAll("#jlist mark").length;
+    const shown = document.querySelectorAll(".entry").length;
+    state.query = "";
+    renderJournal();
+    if (!shown) throw new Error(`搜索「${word}」后列表为空`);
+    if (!marks) throw new Error(`搜索「${word}」没有高亮`);
+    return `${marks} 处`;
+  });
+
+  t("分页按钮", () => {
+    if (state.snap.journal.length < 2) return "只有 1 条数据，无法验证分页";
+    const saved = state.limit;
+    const savedSize = state.pageSize;
+    state.pageSize = 1;
+    state.limit = 1;
+    renderJournal();
+    const before = document.querySelectorAll(".entry").length;
+    const btn = $("btnMore");
+    if (before !== 1) throw new Error(`每页设成 1 时却渲染了 ${before} 条`);
+    if (!btn) throw new Error("应有「加载更多」按钮但没有");
+    btn.click();
+    const after = document.querySelectorAll(".entry").length;
+    if (after <= before) throw new Error("点击后条数没有增加");
+    state.limit = saved;
+    state.pageSize = savedSize;
+    renderJournal();
+    return `${before} → ${after}`;
+  });
+
+  let starResult = null;
+  t("S 标星", () => {
+    const id = state.selected;
+    if (!id) throw new Error("没有选中项");
+    key("s");
+    return "已派发";
+  });
+  // 等待异步写入完成
+  await new Promise((r) => setTimeout(r, 400));
+  t("标星状态已回写", () => {
+    const id = state.selected;
+    if (!state.stars[id]) throw new Error("星标没有写入");
+    starResult = id;
+    return "已标星";
+  });
+  t("再按 S 取消", () => {
+    key("s");
+    return "已派发";
+  });
+  await new Promise((r) => setTimeout(r, 400));
+  t("星标已撤销", () => {
+    if (state.stars[starResult]) throw new Error("星标没有取消");
+    return "已恢复原状";
+  });
+
+  state.query = prevQuery;
+  $("search").value = prevQuery;
+  setView(prevView);
+  return results;
+}
+
+async function renderUiTest() {
+  const box = $("uiTestResult");
+  box.innerHTML = `<div class="dimg">正在自检…</div>`;
+  const results = await uiSelfTest();
+  const failed = results.filter((r) => !r.ok).length;
+  box.innerHTML =
+    `<div class="dhead">界面自检 · ${failed ? `<span class="bad">${failed} 项失败</span>` : `<span class="ok">全部通过</span>`}</div>` +
+    `<table class="dtable"><tbody>` +
+    results
+      .map(
+        (r) =>
+          `<tr><td class="${r.ok ? "ok" : "bad"}">${r.ok ? "通过" : "失败"}</td><td>${esc(r.name)}</td>` +
+          `<td class="mono small">${esc(r.detail)}</td></tr>`
+      )
+      .join("") +
+    `</tbody></table>`;
+
+  // 把结果落盘，方便不开窗口也能核对
+  try {
+    await fetch("/api/uitest", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ results }),
+    });
+  } catch (e) {}
+}
+
+/* 复制 */
+async function copyText(text) {
+  try {
+    await navigator.clipboard.writeText(text);
+    return true;
+  } catch (e) {
+    const ta = document.createElement("textarea");
+    ta.value = text;
+    document.body.appendChild(ta);
+    ta.select();
+    const ok = document.execCommand("copy");
+    document.body.removeChild(ta);
+    return ok;
+  }
+}
+
+/* ---------------- 事件绑定 ---------------- */
+
+function bind() {
+  document.querySelectorAll(".navitem").forEach((b) => b.addEventListener("click", () => setView(b.dataset.view)));
+
+  $("btnRefresh").addEventListener("click", () => load(true));
+
+  $("chips").addEventListener("click", (ev) => {
+    const b = ev.target.closest(".chip");
+    if (!b) return;
+    state.filter = b.dataset.filter;
+    state.limit = state.pageSize || 60;
+    document.querySelectorAll("#chips .chip").forEach((x) => x.classList.toggle("active", x === b));
+    renderJournal();
+  });
+
+  $("search").addEventListener("input", (ev) => {
+    state.query = ev.target.value;
+    state.limit = state.pageSize || 60;
+    renderJournal();
+  });
+
+  $("btnStarred").addEventListener("click", () => {
+    state.starredOnly = !state.starredOnly;
+    state.limit = state.pageSize || 60;
+    $("btnStarred").classList.toggle("on", state.starredOnly);
+    renderJournal();
+  });
+
+  $("btnCal").addEventListener("click", (ev) => {
+    if ($("calpop").classList.contains("hidden")) openCal(ev.currentTarget);
+    else $("calpop").classList.add("hidden");
+  });
+
+  $("calPrev").addEventListener("click", () => {
+    cal.month = new Date(cal.month.getFullYear(), cal.month.getMonth() - 1, 1);
+    renderCal();
+  });
+  $("calNext").addEventListener("click", () => {
+    cal.month = new Date(cal.month.getFullYear(), cal.month.getMonth() + 1, 1);
+    renderCal();
+  });
+  $("calgrid").addEventListener("click", (ev) => {
+    const d = ev.target.closest("[data-day]");
+    if (!d) return;
+    state.day = d.dataset.day;
+    state.limit = state.pageSize || 60;
+    $("dayFilterText").textContent = "只看 " + state.day.replace(/-/g, ".");
+    $("dayFilter").classList.remove("hidden");
+    $("calpop").classList.add("hidden");
+    renderJournal();
+  });
+  $("btnClearDay").addEventListener("click", () => {
+    state.day = null;
+    $("dayFilter").classList.add("hidden");
+    renderJournal();
+  });
+
+  $("jlist").addEventListener("click", (ev) => {
+    const star = ev.target.closest("[data-star]");
+    if (star) {
+      toggleStar(star.dataset.star);
+      return;
+    }
+    const exp = ev.target.closest("[data-expand]");
+    if (exp) {
+      const id = exp.dataset.expand;
+      if (state.openIds.has(id)) state.openIds.delete(id);
+      else state.openIds.add(id);
+      renderJournal();
+      return;
+    }
+    const open = ev.target.closest("[data-open]");
+    if (open) showDetail(open.dataset.open);
+  });
+
+  $("dClose").addEventListener("click", () => $("overlay").classList.add("hidden"));
+  $("overlay").addEventListener("click", (ev) => {
+    if (ev.target === $("overlay")) $("overlay").classList.add("hidden");
+  });
+  $("dStar").addEventListener("click", () => state.detailId && toggleStar(state.detailId));
+  $("dNoteSave").addEventListener("click", saveNote);
+
+  $("topicList").addEventListener("click", (ev) => {
+    const b = ev.target.closest("[data-word]");
+    if (!b) return;
+    state.query = b.dataset.word;
+    state.limit = state.pageSize || 60;
+    $("search").value = state.query;
+    setView("journal");
+  });
+  $("dCopy").addEventListener("click", async () => {
+    const ok = await copyText($("dBody").textContent);
+    $("dCopy").textContent = ok ? "已复制" : "复制失败";
+    setTimeout(() => ($("dCopy").textContent = "复制"), 1400);
+  });
+
+  $("diagClose").addEventListener("click", () => $("diagOverlay").classList.add("hidden"));
+
+  // 首次运行：设置监测目录
+  const doSetup = async () => {
+    const p = $("setupPath").value.trim();
+    if (!p) {
+      $("setupMsg").textContent = "请先填一个路径";
+      return;
+    }
+    $("setupMsg").textContent = "检查中…";
+    try {
+      const r = await fetch("/api/setup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ path: p }),
+      });
+      const d = await r.json();
+      if (d.ok) {
+        $("setupMsg").textContent = "";
+        $("setupOverlay").classList.add("hidden");
+        state.limit = 0;
+        await load(true);
+      } else {
+        $("setupMsg").textContent = d.error || "没认出来这个路径";
+      }
+    } catch (e) {
+      $("setupMsg").textContent = "请求失败：" + e.message;
+    }
+  };
+  $("setupSave").addEventListener("click", doSetup);
+  $("setupPath").addEventListener("keydown", (ev) => {
+    if (ev.key === "Enter") doSetup();
+  });
+  $("diagOverlay").addEventListener("click", (ev) => {
+    if (ev.target === $("diagOverlay")) $("diagOverlay").classList.add("hidden");
+  });
+
+  // 连点头像 5 次打开诊断面板
+  let taps = 0;
+  let tapTimer = null;
+  $("brandAvatar").addEventListener("click", () => {
+    taps += 1;
+    if (tapTimer) clearTimeout(tapTimer);
+    tapTimer = setTimeout(() => (taps = 0), 1200);
+    if (taps >= 5) {
+      taps = 0;
+      openDiag();
+    }
+  });
+
+  document.addEventListener("click", (ev) => {
+    if (!$("calpop").classList.contains("hidden") && !ev.target.closest("#calpop") && !ev.target.closest("#btnCal")) {
+      $("calpop").classList.add("hidden");
+    }
+  });
+
+  document.addEventListener("keydown", (ev) => {
+    const typing = ev.target && (ev.target.tagName === "INPUT" || ev.target.tagName === "TEXTAREA");
+
+    if (ev.key === "Escape") {
+      $("overlay").classList.add("hidden");
+      $("diagOverlay").classList.add("hidden");
+      $("calpop").classList.add("hidden");
+      if (typing) ev.target.blur();
+      return;
+    }
+
+    if ((ev.ctrlKey || ev.metaKey) && ev.key === "f") {
+      ev.preventDefault();
+      if (state.view !== "journal") setView("journal");
+      $("search").focus();
+      return;
+    }
+
+    if (typing) return;
+
+    if (ev.key === "g" || ev.key === "G") {
+      const view = state.view === "home" ? $("viewHome") : $("viewJournal");
+      view.scrollTop = 0;
+      return;
+    }
+
+    if (state.view !== "journal") return;
+
+    const list = filtered().slice(0, state.limit || 9999);
+    if (!list.length) return;
+    const idx = list.findIndex((e) => e.id === state.selected);
+
+    if (ev.key === "j" || ev.key === "J" || ev.key === "ArrowDown") {
+      ev.preventDefault();
+      const next = list[Math.min(list.length - 1, idx < 0 ? 0 : idx + 1)];
+      state.selected = next.id;
+      renderJournal();
+      const el = document.querySelector(`.entry[data-id="${next.id}"]`);
+      if (el) el.scrollIntoView({ block: "nearest" });
+      return;
+    }
+    if (ev.key === "k" || ev.key === "K" || ev.key === "ArrowUp") {
+      ev.preventDefault();
+      const prev = list[Math.max(0, idx < 0 ? 0 : idx - 1)];
+      state.selected = prev.id;
+      renderJournal();
+      const el = document.querySelector(`.entry[data-id="${prev.id}"]`);
+      if (el) el.scrollIntoView({ block: "nearest" });
+      return;
+    }
+    if (ev.key === "Enter" && state.selected) {
+      ev.preventDefault();
+      showDetail(state.selected);
+      return;
+    }
+    if ((ev.key === "s" || ev.key === "S") && state.selected) {
+      ev.preventDefault();
+      toggleStar(state.selected);
+    }
+  });
+
+  window.addEventListener("resize", () => $("calpop").classList.add("hidden"));
+}
+
+function boot() {
+  bind();
+  const raw = decodeURIComponent((location.hash || "").replace(/^#/, ""));
+  const [view, qs] = raw.split("?");
+  const params = new URLSearchParams(qs || "");
+  if (view === "journal" || view === "memory") setView(view);
+  if (params.get("q")) {
+    state.query = params.get("q");
+    $("search").value = state.query;
+  }
+  if (view === "diag") setTimeout(openDiag, 600);
+
+  scheduleRefresh();
+  load(true).then(() => {
+    scheduleRefresh();
+    if (state.query) renderJournal();
+    if (view === "diag" && params.get("selftest")) {
+      setTimeout(async () => {
+        await openDiag();
+        // 自检模式只留结果，方便一眼看完
+        $("diagBody").innerHTML =
+          `<div class="dsec"><div class="dhead">界面自检</div><div id="uiTestResult"></div></div>`;
+        renderUiTest();
+      }, 900);
+    }
+  });
+}
+
+boot();

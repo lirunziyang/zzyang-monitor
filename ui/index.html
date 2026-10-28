@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>子漾监测</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='16' fill='%23c08f4d'/%3E%3Ctext x='32' y='44' font-size='34' text-anchor='middle' fill='%23241d12' font-family='serif'%3E漾%3C/text%3E%3C/svg%3E" />
+<link rel="stylesheet" href="style.css" />
+</head>
+<body>
+<div id="app">
+  <aside class="side">
+    <div class="brand">
+      <div class="avatar" id="brandAvatar" title="连点 5 次查看诊断">漾</div>
+      <div class="brand-text">
+        <div class="bname">子漾</div>
+        <div class="bsub" id="sideState">连接中</div>
+      </div>
+    </div>
+
+    <nav class="nav">
+      <button class="navitem active" data-view="home">
+        <span class="nic">状</span><span>他现在在干什么</span>
+      </button>
+      <button class="navitem" data-view="journal">
+        <span class="nic">记</span><span>日记</span><span class="badge" id="jcount"></span>
+      </button>
+      <button class="navitem" data-view="memory">
+        <span class="nic">忆</span><span>记忆档案</span>
+      </button>
+    </nav>
+
+    <div class="side-foot">
+      <div class="runrow"><span class="dot" id="runDot"></span><span id="runText">检测中…</span></div>
+      <div class="tiny" id="srcInfo"></div>
+      <div class="tiny">只读 · 不改动它的任何数据</div>
+    </div>
+  </aside>
+
+  <main>
+    <header class="topbar">
+      <div class="titlebox">
+        <h1 id="viewTitle">他现在在干什么</h1>
+        <div class="sub" id="viewSub">从它自己留下的痕迹推断</div>
+      </div>
+      <div class="top-actions">
+        <span class="refreshinfo" id="refreshInfo"></span>
+        <button class="ghost" id="btnRefresh">刷新</button>
+      </div>
+    </header>
+
+    <!-- 概览 -->
+    <section id="viewHome" class="view">
+      <div class="warnbar hidden" id="warnHome"></div>
+      <div class="hero card">
+        <div class="hero-main">
+          <div class="kicker">现在</div>
+          <div class="hero-state" id="heroState">—</div>
+          <div class="hero-hint" id="heroHint">正在读取…</div>
+        </div>
+        <div class="hero-side">
+          <div class="metric">
+            <div class="mval" id="quietVal">—</div>
+            <div class="mlab">没有新动静</div>
+          </div>
+          <div class="metric">
+            <div class="mval small" id="lastMarkVal">—</div>
+            <div class="mlab">最后一条痕迹</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="grid3">
+        <div class="card stat">
+          <div class="sv" id="stJournal">0</div>
+          <div class="sl">今天写的日记</div>
+        </div>
+        <div class="card stat">
+          <div class="sv" id="stRead">0</div>
+          <div class="sl">今天读了几次书</div>
+        </div>
+        <div class="card stat">
+          <div class="sv" id="stMsg">0</div>
+          <div class="sl">今天主动找你</div>
+        </div>
+      </div>
+
+      <div class="card reading">
+        <div class="rhead">
+          <div>
+            <div class="kicker">书架</div>
+            <div class="rtitle" id="bookName">—</div>
+          </div>
+          <div class="rpos" id="bookPos">—</div>
+        </div>
+        <div class="bar"><i id="bookBar"></i></div>
+        <div class="rfoot">
+          <span id="bookPct">0%</span>
+          <span id="bookTime"></span>
+        </div>
+        <div class="bookmore hidden" id="bookMore"></div>
+      </div>
+
+      <div class="card timeline">
+        <div class="thead">
+          <div class="kicker">最近做了什么</div>
+          <div class="tiny">按它自己记下的顺序</div>
+        </div>
+        <div class="tl" id="timeline"></div>
+      </div>
+
+      <div class="card history hidden" id="historyCard">
+        <div class="thead">
+          <div class="kicker">往年今天</div>
+          <div class="tiny">同一个日子，它以前写过什么</div>
+        </div>
+        <div id="historyList"></div>
+      </div>
+
+      <div class="card topics hidden" id="topicCard">
+        <div class="thead">
+          <div class="kicker">最近常提到的</div>
+          <div class="tiny">纯本地词频统计，点一下就去搜</div>
+        </div>
+        <div class="topicwrap" id="topicList"></div>
+      </div>
+    </section>
+
+    <!-- 记忆档案 -->
+    <section id="viewMemory" class="view hidden">
+      <div class="card memhead">
+        <div>
+          <div class="kicker">它自己整理的</div>
+          <div class="memtitle">关于你和它的事实档案</div>
+          <div class="memhint" id="memHint"></div>
+        </div>
+        <div class="memmeta" id="memMeta"></div>
+      </div>
+      <div id="memSections"></div>
+    </section>
+
+    <!-- 日记 -->
+    <section id="viewJournal" class="view hidden">
+      <div class="warnbar hidden" id="warnJournal"></div>
+      <div class="jbar">
+        <div class="search">
+          <input id="search" type="text" placeholder="在日记里找一句话…" autocomplete="off" />
+        </div>
+        <div class="chips" id="chips">
+          <button class="chip active" data-filter="feeling">有感情的</button>
+          <button class="chip" data-filter="all">全部记录</button>
+          <button class="chip" data-filter="self">自己写的</button>
+          <button class="chip" data-filter="dialogue">聊天时写的</button>
+        </div>
+        <div class="jbtns">
+          <button class="ghost" id="btnStarred">★ 只看标星</button>
+          <button class="ghost" id="btnCal">日历</button>
+        </div>
+      </div>
+      <div class="dayfilter hidden" id="dayFilter">
+        <span id="dayFilterText"></span>
+        <button class="clear" id="btnClearDay">×</button>
+      </div>
+      <div class="jlist" id="jlist"></div>
+      <div class="empty hidden" id="jempty">这里还没有符合条件的内容。</div>
+    </section>
+  </main>
+</div>
+
+<!-- 日历 -->
+<div class="calpop hidden" id="calpop">
+  <div class="calhead">
+    <button class="nav-btn" id="calPrev">‹</button>
+    <div id="calTitle"></div>
+    <button class="nav-btn" id="calNext">›</button>
+  </div>
+  <div class="calweek">
+    <span>一</span><span>二</span><span>三</span><span>四</span><span>五</span><span>六</span><span>日</span>
+  </div>
+  <div class="calgrid" id="calgrid"></div>
+  <div class="calfoot"><span class="cdot"></span>那天有日记</div>
+</div>
+
+<!-- 详情 -->
+<div class="overlay hidden" id="overlay">
+  <div class="sheet" id="sheet">
+    <div class="shead">
+      <div>
+        <div class="stime" id="dTime"></div>
+        <div class="skind" id="dKind"></div>
+      </div>
+      <div class="sactions">
+        <button class="ghost" id="dStar">★</button>
+        <button class="ghost" id="dCopy">复制</button>
+        <button class="ghost" id="dClose">关闭</button>
+      </div>
+    </div>
+    <div class="sbody" id="dBody"></div>
+    <div class="snote hidden" id="dNoteBox">
+      <div class="snlabel">我的批注 · 只存在本程序里，不影响它</div>
+      <textarea id="dNote" rows="3" placeholder="给这篇写一句自己的话…"></textarea>
+      <div class="snrow">
+        <button class="ghost" id="dNoteSave">保存批注</button>
+        <span class="tiny" id="dNoteHint"></span>
+      </div>
+    </div>
+    <div class="sfoot" id="dFoot"></div>
+  </div>
+</div>
+
+<!-- 首次运行：指定监测目录 -->
+<div class="overlay hidden" id="setupOverlay">
+  <div class="sheet setupsheet">
+    <div class="shead">
+      <div>
+        <div class="stime">先告诉我在哪</div>
+        <div class="skind">找到 AstrBot 的数据目录，之后只读地看它</div>
+      </div>
+    </div>
+    <div class="sbody setupbody">
+      <p>这个程序只读地看一个 AstrBot 机器人的日记，需要你指定它的数据目录。</p>
+      <p class="tinyp">一般是下面这种，里面应该有 <code>data_v4.db</code> 和 <code>plugins</code> 文件夹：</p>
+      <pre class="tinypath">...\AstrBot\data
+...\AstrBot\instance\data</pre>
+      <input id="setupPath" type="text" spellcheck="false" placeholder="把路径粘贴到这里，例如 D:\AstrBot\data" />
+      <div class="setupmsg" id="setupMsg"></div>
+      <div class="snrow">
+        <button class="ghost primary" id="setupSave">保存并开始</button>
+        <span class="tiny">只读，不会改动它的任何东西</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 诊断 -->
+<div class="overlay hidden" id="diagOverlay">
+  <div class="sheet diagsheet">
+    <div class="shead">
+      <div>
+        <div class="stime">诊断</div>
+        <div class="skind">程序在看什么、看到了什么</div>
+      </div>
+      <button class="ghost" id="diagClose">关闭</button>
+    </div>
+    <div class="sbody diagbody" id="diagBody"></div>
+  </div>
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>

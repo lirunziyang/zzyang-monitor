@@ -1,0 +1,26 @@
+# ---- 运行环境（体积大，可从任意 Python 3.12 重建，不入库）----
+runtime/
+
+# ---- 本程序运行期产生的数据（每个人本机不同，不入库）----
+data/
+*.log
+jieba.cache
+
+# ---- Python 缓存 ----
+__pycache__/
+*.py[cod]
+
+# ---- 测试临时副本 ----
+tests/.tmp*/
+
+# ---- 系统垃圾 ----
+Thumbs.db
+desktop.ini
+.DS_Store
+
+# ---- 说明 ----
+# vendor\jieba 体积约 20MB，但它是离线可用的唯一来源，故意入库
+# host\dist 里的 exe/dll 是编译产物，故意入库：源码用户在准备 runtime 后不用再装编译器
+
+# ---- 打包产物 ----
+release/

@@ -1,0 +1,29 @@
+# 统一换行，避免不同机器/编辑器之间来回改行尾
+
+# 默认：按文本处理，仓库里统一存 LF
+* text=auto
+
+# Windows 脚本必须 CRLF（cmd / wscript 对纯 LF 不稳）
+*.bat   text eol=crlf
+*.cmd   text eol=crlf
+*.vbs   text eol=crlf
+*.ps1   text eol=crlf
+
+# 代码与文档统一 LF
+*.py    text eol=lf
+*.js    text eol=lf
+*.css   text eol=lf
+*.html  text eol=lf
+*.md    text eol=lf
+*.json  text eol=lf
+*.txt   text eol=lf
+
+# C# 用 CRLF，跟 Windows 工具链一致
+*.cs    text eol=crlf
+
+# 二进制：不要做任何行尾转换
+*.ico   binary
+*.exe   binary
+*.dll   binary
+*.p     binary
+vendor/jieba/**  -text
