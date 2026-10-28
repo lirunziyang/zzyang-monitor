@@ -649,6 +649,20 @@ async function uiSelfTest() {
     return `${n} 条`;
   });
 
+  t("正文字体清晰", () => {
+    const el = document.querySelector(".econtent");
+    if (!el) throw new Error("找不到日记正文");
+    const cs = getComputedStyle(el);
+    const fam = cs.fontFamily || "";
+    if (/SimSun|Songti|STSong/i.test(fam)) throw new Error("仍是衬线字体：" + fam);
+    if (!/YaHei|Segoe/i.test(fam)) throw new Error("字体不符合预期：" + fam);
+    const fs = parseFloat(cs.fontSize);
+    if (!(fs >= 15)) throw new Error("正文字号偏小：" + fs + "px");
+    const lh = parseFloat(cs.lineHeight);
+    if (!lh || lh / fs < 1.7) throw new Error("行高偏紧：" + lh);
+    return fs + "px / " + Math.round(lh) + "px";
+  });
+
   t("J 选中下一条", () => {
     key("j");
     if (!state.selected) throw new Error("按下 J 后没有选中项");

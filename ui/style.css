@@ -21,8 +21,9 @@
   --dur: 180ms;
   --ease: cubic-bezier(.22, .61, .36, 1);
 
-  --font-ui: "Microsoft YaHei UI", "Microsoft YaHei", "Segoe UI", system-ui, -apple-system, sans-serif;
-  --font-serif: "Source Han Serif SC", "Noto Serif CJK SC", "Songti SC", "SimSun", "STSong", serif;
+  --font-ui: "Segoe UI Variable Text", "Segoe UI", "Microsoft YaHei UI", "Microsoft YaHei", system-ui, sans-serif;
+  /* 正文统一走无衬线：宋体在 14~15px 下发虚，改成雅黑更清楚 */
+  --font-read: "Microsoft YaHei UI", "Microsoft YaHei", "Segoe UI", system-ui, sans-serif;
   --font-mono: Consolas, "Cascadia Mono", monospace;
 }
 
@@ -43,8 +44,8 @@
   --stroke-strong: rgba(255, 255, 255, 0.16);
 
   --text: #eef1f3;
-  --text-2: rgba(238, 241, 243, 0.72);
-  --text-3: rgba(238, 241, 243, 0.48);
+  --text-2: rgba(238, 241, 243, 0.76);
+  --text-3: rgba(238, 241, 243, 0.52);
 
   --accent: #3ecf8e;
   --accent-ink: #04231a;
@@ -160,7 +161,7 @@ html, body {
   background: transparent;
   color: var(--text);
   font-family: var(--font-ui);
-  font-size: 14px;
+  font-size: 14.5px;
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
 }
@@ -201,7 +202,7 @@ button { cursor: pointer; }
   width: 40px; height: 40px;
   border-radius: 13px;
   display: grid; place-items: center;
-  font-family: var(--font-serif);
+  font-family: var(--font-read);
   font-size: 19px;
   color: var(--accent-ink);
   background: linear-gradient(155deg, #6fe3b3, var(--accent));
@@ -242,7 +243,7 @@ button { cursor: pointer; }
   width: 22px; height: 22px;
   border-radius: 7px;
   display: grid; place-items: center;
-  font-family: var(--font-serif);
+  font-family: var(--font-read);
   font-size: 11px;
   color: var(--text-3);
   background: var(--glass-1);
@@ -388,7 +389,7 @@ button { cursor: pointer; }
   border: 1px solid var(--stroke-strong);
   border-radius: var(--r-ctl);
   color: var(--text);
-  font-size: 14px;
+  font-size: 14.5px;
   padding: 11px 13px;
   outline: none;
   transition: border-color var(--dur) var(--ease);
@@ -520,7 +521,7 @@ h1 { margin: 0; font-size: 21px; font-weight: 600; letter-spacing: .01em; }
   border: 1px solid var(--stroke);
   border-radius: var(--r-ctl);
 }
-.bookrow .bname2 { color: var(--text); font-family: var(--font-serif); font-size: 13px; }
+.bookrow .bname2 { color: var(--text); font-family: var(--font-read); font-size: 13px; }
 .bookrow .bpct { font-size: 11px; color: var(--accent); font-variant-numeric: tabular-nums; }
 .bookrow .bmeta { margin-left: auto; font-size: 11.5px; color: var(--text-3); font-variant-numeric: tabular-nums; }
 .bookrow .btime { font-size: 11px; color: var(--text-3); font-variant-numeric: tabular-nums; width: 78px; text-align: right; }
@@ -557,7 +558,7 @@ h1 { margin: 0; font-size: 21px; font-weight: 600; letter-spacing: .01em; }
 .hitem { display: flex; gap: 14px; padding: 9px 0; border-top: 1px solid var(--stroke); }
 .hitem:first-child { border-top: 0; padding-top: 2px; }
 .hdate { flex: 0 0 84px; font-size: 11.5px; color: var(--text-3); padding-top: 2px; font-variant-numeric: tabular-nums; }
-.htext { font-family: var(--font-serif); font-size: 13.5px; line-height: 1.85; color: var(--text-2); }
+.htext { font-family: var(--font-read); font-size: 13.5px; line-height: 1.85; color: var(--text-2); }
 
 .topics { margin-top: 12px; }
 .topicwrap { display: flex; flex-wrap: wrap; gap: 8px; }
@@ -568,7 +569,7 @@ h1 { margin: 0; font-size: 21px; font-weight: 600; letter-spacing: .01em; }
   border: 1px solid var(--stroke);
   background: var(--glass-1);
   color: var(--text-2);
-  font-family: var(--font-serif);
+  font-family: var(--font-read);
   font-size: 13.5px;
   transition: all var(--dur) var(--ease);
 }
@@ -633,7 +634,7 @@ h1 { margin: 0; font-size: 21px; font-weight: 600; letter-spacing: .01em; }
   padding: 10px 2px 8px;
   background: linear-gradient(180deg, var(--canvas) 74%, transparent);
 }
-.daydate { font-size: 14px; color: var(--text); letter-spacing: .02em; font-variant-numeric: tabular-nums; }
+.daydate { font-size: 14.5px; color: var(--text); letter-spacing: .02em; font-variant-numeric: tabular-nums; }
 .dayrel { font-size: 11px; color: var(--text-3); }
 .daycount {
   margin-left: auto; font-size: 11px; color: var(--text-3);
@@ -667,12 +668,12 @@ h1 { margin: 0; font-size: 21px; font-weight: 600; letter-spacing: .01em; }
 .tag.autocapture { color: var(--text-3); background: var(--glass-1); border-color: var(--stroke); }
 
 .econtent {
-  font-family: var(--font-serif);
-  font-size: 14.5px;
-  line-height: 1.95;
+  font-family: var(--font-read);
+  font-size: 15px;
+  line-height: 1.9;
   color: var(--text);
   white-space: pre-wrap;
-  letter-spacing: .01em;
+  letter-spacing: .004em;
   display: -webkit-box;
   -webkit-line-clamp: 4;
   -webkit-box-orient: vertical;
@@ -717,7 +718,7 @@ mark { background: rgba(216, 178, 115, .26); color: #ffe9c9; border-radius: 3px;
 .memhint { font-size: 12px; color: var(--text-3); line-height: 1.7; }
 .memmeta { font-size: 11.5px; color: var(--text-3); text-align: right; line-height: 1.8; white-space: nowrap; }
 .memsec { margin-bottom: 10px; }
-.memline { font-family: var(--font-serif); font-size: 14px; line-height: 1.95; color: var(--text-2); padding: 3px 0 3px 14px; position: relative; }
+.memline { font-family: var(--font-read); font-size: 14.5px; line-height: 1.95; color: var(--text-2); padding: 3px 0 3px 14px; position: relative; }
 .memline::before { content: ""; position: absolute; left: 0; top: 14px; width: 4px; height: 4px; border-radius: 50%; background: var(--accent); opacity: .5; }
 
 /* ---------- 浮层 ---------- */
@@ -761,9 +762,9 @@ mark { background: rgba(216, 178, 115, .26); color: #ffe9c9; border-radius: 3px;
 .sbody {
   padding: 18px 24px;
   overflow-y: auto;
-  font-family: var(--font-serif);
-  font-size: 15.5px;
-  line-height: 2.05;
+  font-family: var(--font-read);
+  font-size: 16px;
+  line-height: 1.95;
   color: var(--text);
   white-space: pre-wrap;
   letter-spacing: .01em;
@@ -805,7 +806,7 @@ mark { background: rgba(216, 178, 115, .26); color: #ffe9c9; border-radius: 3px;
 #calTitle { font-size: 13.5px; color: var(--text); }
 .nav-btn {
   border: 1px solid var(--stroke); background: var(--glass-1); color: var(--text-2);
-  border-radius: 8px; width: 26px; height: 26px; font-size: 14px; line-height: 1;
+  border-radius: 8px; width: 26px; height: 26px; font-size: 14.5px; line-height: 1;
   transition: all var(--dur) var(--ease);
 }
 .nav-btn:hover { color: var(--text); border-color: var(--stroke-strong); }
