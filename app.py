@@ -25,7 +25,7 @@ from core import store  # noqa: E402
 
 UI_DIR = os.path.join(BASE, "ui")
 PROFILE_DIR = os.path.join(BASE, "data", "webprofile")
-INSTANCE_FILE = os.path.join(BASE, "data", "instance.json")
+INSTANCE_FILE = os.environ.get("ZZYANG_INSTANCE") or os.path.join(BASE, "data", "instance.json")
 STARTED_AT = time.time()
 try:
     with open(os.path.join(BASE, "VERSION"), "r", encoding="utf-8-sig") as _vf:
@@ -338,7 +338,7 @@ def _wait_launched(proc, timeout: float = 20.0) -> bool:
 def launch_window(url: str) -> None:
     """优先用原生窗口宿主；不可用时退回 Edge/Chrome 应用窗口，再不行用默认浏览器。"""
     data_dir = os.path.join(BASE, "data")
-    host = os.path.join(BASE, "host", "dist", "ZzyangMonitor.exe")
+    host = os.environ.get("ZZYANG_HOST") or os.path.join(BASE, "host", "dist", "ZzyangMonitor.exe")
 
     if os.path.exists(host):
         Handler.first_hit_at = 0.0
@@ -366,11 +366,56 @@ def launch_window(url: str) -> None:
                 # 宿主发现已有窗口，把它叫到前台后退出。这是正常情况，不要退到浏览器。
                 log("已有窗口，已切到前台")
                 return
-            log(f"原生窗口没有加载页面（退出码 {code}），改用浏览器窗口")
+            if code == 0:
+                # 正常退出（关窗即退出，或窗口开了又立刻关掉）：
+                # 这不是"打不开"，绝对不能再退回浏览器，否则会弹出一个 127.0.0.1 的窗口。
+                log("原生窗口已关闭，未加载页面，按已关闭处理")
+                return
+            log(f"原生窗口没有加载页面（退出码 {code}），重试一次")
             try:
                 proc.kill()
             except Exception:
                 pass
+
+            # 再试一次：个别机器 WebView2 初始化偶发失败
+            Handler.first_hit_at = 0.0
+            try:
+                proc = subprocess.Popen(
+                    [host, url, data_dir, tray_mode],
+                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                )
+                if _wait_launched(proc):
+                    log("原生窗口已打开（重试成功）")
+                    try:
+                        proc.wait()
+                    except KeyboardInterrupt:
+                        pass
+                    log("原生窗口已关闭")
+                    return
+                code2 = proc.poll()
+                if code2 == 42:
+                    log("已有窗口，已切到前台")
+                    return
+                if code2 == 0:
+                    log("原生窗口已关闭，按已关闭处理")
+                    return
+            except Exception as e:
+                log(f"重试启动失败：{e}")
+
+            # 两次都失败：给出明确提示，不再悄悄开浏览器窗口
+            log("原生窗口连续两次启动失败，已停止（不启用浏览器回退）")
+            try:
+                import ctypes
+
+                ctypes.windll.user32.MessageBoxW(
+                    None,
+                    "原生窗口启动失败。\n\n请确认已安装 WebView2 运行时，或重新运行 准备运行环境.bat。",
+                    "大肥鱼监测",
+                    0x10,
+                )
+            except Exception:
+                pass
+            return
 
     browser = find_browser()
     if not browser:
@@ -425,7 +470,7 @@ def launch_window(url: str) -> None:
 def open_existing(port: int) -> None:
     """已经有实例在跑：只负责把窗口叫出来，不再起服务。"""
     url = f"http://127.0.0.1:{port}/"
-    host = os.path.join(BASE, "host", "dist", "ZzyangMonitor.exe")
+    host = os.environ.get("ZZYANG_HOST") or os.path.join(BASE, "host", "dist", "ZzyangMonitor.exe")
     if os.path.exists(host):
         try:
             subprocess.Popen([host, url, os.path.join(BASE, "data")]).wait()

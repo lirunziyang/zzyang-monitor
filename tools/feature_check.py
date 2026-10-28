@@ -266,6 +266,50 @@ def f_diag_and_instance():
     return "诊断字段完整、单实例检测（活/死）正确"
 
 
+
+def f_no_browser_fallback():
+    """宿主正常退出时不能退回浏览器（否则会弹出一个 127.0.0.1 的窗口）。"""
+    import importlib.util
+
+    root = build_root("fallback")
+    home = os.path.join(TMP, "home_fallback")
+    os.makedirs(home, exist_ok=True)
+
+    # 造一个立刻以 0 退出的假宿主
+    fake_dir = os.path.join(TMP, "fakehost")
+    os.makedirs(fake_dir, exist_ok=True)
+    src = os.path.join(fake_dir, "fake.cs")
+    with open(src, "w", encoding="utf-8") as f:
+        f.write("class P { static int Main(string[] a) { return 0; } }")
+    exe = os.path.join(fake_dir, "FakeHost.exe")
+    csc = r"C:\Windows\Microsoft.NET\Framework64\v4.0.30319\csc.exe"
+    assert_(os.path.exists(csc), "没有 csc.exe，无法做这个测试")
+    r = subprocess.run([csc, "/nologo", "/out:" + exe, src], capture_output=True)
+    assert_(os.path.exists(exe), f"假宿主编译失败：{r.stderr[:200]}")
+
+    spec = importlib.util.spec_from_file_location("zzapp_probe", APP)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+
+    logs = []
+    mod.log = lambda m: logs.append(str(m))
+    os.environ["ZZYANG_HOST"] = exe
+    try:
+        mod.launch_window("http://127.0.0.1:1/")
+    finally:
+        os.environ.pop("ZZYANG_HOST", None)
+
+    joined = " | ".join(logs)
+    assert_(
+        not any("启动浏览器窗口" in x for x in logs),
+        f"宿主正常退出后仍然退回了浏览器：{joined}",
+    )
+    assert_(
+        any("按已关闭处理" in x for x in logs),
+        f"没有走“按已关闭处理”分支：{joined}",
+    )
+    return "退出码 0 时安静结束，没有开浏览器"
+
 def f_close_pref():
     """关窗行为偏好：默认退出，可切换为留在托盘，并持久化。"""
     root = build_root("close")
@@ -613,6 +657,7 @@ CASES = [
     ("F-08 阅读统计", f_reading_stats),
     ("F-09 机器人名字", f_bot_name),
     ("F-10 关窗行为", f_close_pref),
+    ("F-11 不回退浏览器", f_no_browser_fallback),
 ]
 
 
