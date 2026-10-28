@@ -20,7 +20,7 @@
     <div class="brand">
       <div class="avatar" id="brandAvatar" title="连点 5 次查看诊断">漾</div>
       <div class="brand-text">
-        <div class="bname">子漾</div>
+        <div class="bname" id="bname">子漾</div>
         <div class="bsub" id="sideState">连接中</div>
       </div>
     </div>
@@ -63,6 +63,10 @@
         <div class="set-row">
           <span>透明质感</span>
           <button class="switch" id="switchTransparent" aria-label="透明质感"></button>
+        </div>
+        <div class="set-row name-row">
+          <span>机器人名字</span>
+          <input id="nameInput" type="text" maxlength="20" placeholder="比如 小漾" spellcheck="false" />
         </div>
       </div>
     </div>
@@ -256,16 +260,20 @@
   <div class="sheet setupsheet">
     <div class="shead">
       <div>
-        <div class="stime">先告诉我在哪</div>
-        <div class="skind">找到 AstrBot 的数据目录，之后只读地看它</div>
+        <div class="stime">先认识一下</div>
+        <div class="skind">给它起个名字，再告诉我它住哪</div>
       </div>
     </div>
     <div class="sbody setupbody">
-      <p>这个程序只读地看一个 AstrBot 机器人的日记，需要你指定它的数据目录。</p>
-      <p class="tinyp">一般是下面这种，里面应该有 <code>data_v4.db</code> 和 <code>plugins</code> 文件夹：</p>
-      <pre class="tinypath">...\AstrBot\data
+      <p>先给它起个名字，界面上就用这个名字显示。</p>
+      <input id="setupName" type="text" maxlength="20" placeholder="你养的机器人的名字，比如 小漾" spellcheck="false" />
+      <div id="pathBlock">
+        <p class="tinyp" style="margin-top:16px">然后告诉我它的数据目录在哪。</p>
+        <p class="tinyp">一般是下面这种，里面应该有 <code>data_v4.db</code> 和 <code>plugins</code> 文件夹：</p>
+        <pre class="tinypath">...\AstrBot\data
 ...\AstrBot\instance\data</pre>
-      <input id="setupPath" type="text" spellcheck="false" placeholder="把路径粘贴到这里，例如 D:\AstrBot\data" />
+        <input id="setupPath" type="text" spellcheck="false" placeholder="把路径粘贴到这里，例如 D:\AstrBot\data" />
+      </div>
       <div class="setupmsg" id="setupMsg"></div>
       <div class="snrow">
         <button class="ghost primary" id="setupSave">保存并开始</button>

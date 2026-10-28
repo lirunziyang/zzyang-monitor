@@ -165,17 +165,27 @@ function renderShell() {
     }
   }
 
+  // 机器人名字（用户自己填的 ID）
+  const botName = (s.bot_name || "").trim() || "大肥鱼";
+  if ($("bname")) $("bname").textContent = botName;
+  const av = $("brandAvatar");
+  if (av) av.textContent = botName.slice(-1);
+  if ($("nameInput") && document.activeElement !== $("nameInput")) $("nameInput").value = s.bot_name || "";
+
   const jn = s.journal.length;
   $("jcount").textContent = jn ? jn : "";
   $("srcInfo").textContent = "日记文件 " + (s.source.journal_mtime || "—");
 
   // 还没指定监测目录：直接引导去设置
   const setup = s.setup || {};
-  if (setup.needed) {
+  const needSetup = setup.needed || setup.name_needed;
+  if (needSetup) {
     $("setupOverlay").classList.remove("hidden");
+    $("pathBlock").classList.toggle("hidden", !setup.needed);
     if (!$("setupPath").value && setup.bot_root && setup.source === "settings") {
       $("setupPath").value = setup.bot_root;
     }
+    if (!$("setupName").value && s.bot_name) $("setupName").value = s.bot_name;
   } else {
     $("setupOverlay").classList.add("hidden");
   }
@@ -724,6 +734,19 @@ async function uiSelfTest() {
     return "已恢复原状";
   });
 
+  t("机器人名字生效", () => {
+    if (!$("setupName")) throw new Error("首次设置里没有名字输入框");
+    if (!$("nameInput")) throw new Error("设置面板里没有名字输入框");
+    const old = state.snap.bot_name;
+    state.snap.bot_name = "测试名字";
+    renderShell();
+    const shown = $("bname").textContent;
+    state.snap.bot_name = old;
+    renderShell();
+    if (shown !== "测试名字") throw new Error("侧栏没跟着变：" + shown);
+    return shown;
+  });
+
   t("阅读总览渲染", () => {
     const rows = document.querySelectorAll("#bookRows .bookrow").length;
     const sessions = $("rsSessions").textContent.trim();
@@ -939,6 +962,27 @@ function bind() {
     if (!card) return;
     saveTheme(card.dataset.pick, $("switchTransparent").classList.contains("on"));
   });
+  const saveName = async () => {
+    const name = $("nameInput").value.trim();
+    if (!name) return;
+    try {
+      const r = await fetch("/api/name", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: name }),
+      });
+      const d = await r.json();
+      if (d.ok) {
+        state.snap.bot_name = d.bot_name;
+        renderShell();
+      }
+    } catch (e) {}
+  };
+  $("nameInput").addEventListener("change", saveName);
+  $("nameInput").addEventListener("keydown", (ev) => {
+    if (ev.key === "Enter") { ev.preventDefault(); saveName(); }
+  });
+
   $("switchTransparent").addEventListener("click", (ev) => {
     ev.stopPropagation();
     saveTheme(currentTheme(), !$("switchTransparent").classList.contains("on"));
@@ -951,27 +995,45 @@ function bind() {
 
   // 首次运行：设置监测目录
   const doSetup = async () => {
-    const p = $("setupPath").value.trim();
-    if (!p) {
-      $("setupMsg").textContent = "请先填一个路径";
+    const name = $("setupName").value.trim();
+    const pathVal = $("setupPath").value.trim();
+    const needPath = !$("pathBlock").classList.contains("hidden");
+    if (!name) {
+      $("setupMsg").textContent = "先给它起个名字";
       return;
     }
-    $("setupMsg").textContent = "检查中…";
+    if (needPath && !pathVal) {
+      $("setupMsg").textContent = "请先填一个数据目录";
+      return;
+    }
+    $("setupMsg").textContent = "保存中…";
     try {
-      const r = await fetch("/api/setup", {
+      const rn = await fetch("/api/name", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ path: p }),
+        body: JSON.stringify({ name: name }),
       });
-      const d = await r.json();
-      if (d.ok) {
-        $("setupMsg").textContent = "";
-        $("setupOverlay").classList.add("hidden");
-        state.limit = 0;
-        await load(true);
-      } else {
-        $("setupMsg").textContent = d.error || "没认出来这个路径";
+      const dn = await rn.json();
+      if (!dn.ok) {
+        $("setupMsg").textContent = dn.error || "名字没保存成功";
+        return;
       }
+      if (needPath) {
+        const r = await fetch("/api/setup", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ path: pathVal }),
+        });
+        const d = await r.json();
+        if (!d.ok) {
+          $("setupMsg").textContent = d.error || "没认出来这个路径";
+          return;
+        }
+      }
+      $("setupMsg").textContent = "";
+      $("setupOverlay").classList.add("hidden");
+      state.limit = 0;
+      await load(true);
     } catch (e) {
       $("setupMsg").textContent = "请求失败：" + e.message;
     }

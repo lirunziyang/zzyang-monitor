@@ -266,8 +266,78 @@ def f_diag_and_instance():
     return "诊断字段完整、单实例检测（活/死）正确"
 
 
-def f_reading_stats():
+def f_bot_name():
+    """机器人名字：能保存、能读回、空值拒绝。"""
+    root = build_root("name")
+    write_db(root, {"甲.txt": (100, "2026-10-27 10:00")})
+    home = os.path.join(TMP, "home_name")
+    os.makedirs(home, exist_ok=True)
+    env = dict(os.environ)
+    env["ZZYANG_DATA_ROOT"] = root
+    env["ZZYANG_DATA_HOME"] = home
+    env["PYTHONIOENCODING"] = "utf-8"
+
+    proc = subprocess.Popen(
+        [PY, APP, "--serve"], cwd=BASE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+        text=True, encoding="utf-8", errors="replace", bufsize=1, env=env,
+    )
+    try:
+        url = None
+        end = time.time() + 15
+        while time.time() < end and url is None:
+            line = proc.stdout.readline()
+            if line and line.strip().startswith("http://"):
+                url = line.strip()
+        assert_(url, "服务未启动")
+
+        def get():
+            with urllib.request.urlopen(url + "api/snapshot", timeout=10) as r:
+                return json.loads(r.read())
+
+        def post(path, payload, allow_error=False):
+            req = urllib.request.Request(
+                url + path, data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
+                headers={"Content-Type": "application/json"}, method="POST",
+            )
+            try:
+                with urllib.request.urlopen(req, timeout=10) as r:
+                    return json.loads(r.read())
+            except urllib.error.HTTPError as e:
+                if not allow_error:
+                    raise
+                return json.loads(e.read())
+
+        snap = get()
+        assert_(snap["setup"]["name_needed"] is True, "没填名字时应提示需要名字")
+        assert_(snap["bot_name"] == "", "初始名字应为空")
+
+        r = post("api/name", {"name": "小漾"})
+        assert_(r.get("ok") is True, f"保存名字失败：{r}")
+        snap2 = get()
+        assert_(snap2["bot_name"] == "小漾", f"名字没落到快照：{snap2['bot_name']}")
+        assert_(snap2["setup"]["name_needed"] is False, "填过名字后不该再要求")
+
+        empty = post("api/name", {"name": "   "}, allow_error=True)
+        assert_(empty.get("ok") is False, "空名字应被拒绝")
+
+        long_name = post("api/name", {"name": "名" * 30}, allow_error=True)
+        assert_(long_name.get("ok") is False, "超长名字应被拒绝")
+
+        cfg = os.path.join(home, "settings.json")
+        with open(cfg, "r", encoding="utf-8") as f:
+            saved = json.load(f)
+        assert_(saved.get("bot_name") == "小漾", f"设置文件里没存名字：{saved.get('bot_name')}")
+    finally:
+        proc.terminate()
+        try:
+            proc.wait(timeout=8)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+
+    return "名字可保存/读回，空值与超长被拒"
+
     """书架：按书分开统计次数与字数，并给出合并总览。"""
+def f_reading_stats():
     root = build_root("reading")
     entries = []
     # A 书读 3 次，每次 1000 字
@@ -477,6 +547,7 @@ CASES = [
     ("F-06 首次设置路径", f_setup_flow),
     ("F-07 主题持久化", f_theme_persist),
     ("F-08 阅读统计", f_reading_stats),
+    ("F-09 机器人名字", f_bot_name),
 ]
 
 

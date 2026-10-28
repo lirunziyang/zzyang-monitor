@@ -15,6 +15,7 @@ THEMES = ("xuantan", "black", "white")
 
 DEFAULTS = {
     "bot_root": "",
+    "bot_name": "",
     "theme": "xuantan",
     "transparent": True,
     "refresh_seconds": 30,
@@ -41,6 +42,10 @@ def _sanitize(raw: dict) -> dict:
     root = raw.get("bot_root")
     if isinstance(root, str):
         out["bot_root"] = root.strip()[:260]
+
+    bot_name = raw.get("bot_name")
+    if isinstance(bot_name, str):
+        out["bot_name"] = bot_name.strip()[:20]
 
     theme = raw.get("theme")
     if isinstance(theme, str) and theme in THEMES:

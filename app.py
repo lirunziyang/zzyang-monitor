@@ -105,6 +105,24 @@ class Handler(SimpleHTTPRequestHandler):
         return super().do_GET()
 
     def do_POST(self):
+        if self.path.startswith("/api/name"):
+            try:
+                length = int(self.headers.get("Content-Length") or 0)
+                payload = json.loads(self.rfile.read(length) or b"{}")
+                name = str(payload.get("name", "")).strip()
+                if not name:
+                    return self._json({"ok": False, "error": "名字不能为空"}, 400)
+                if len(name) > 20:
+                    return self._json({"ok": False, "error": "名字最长 20 个字"}, 400)
+                conf = zzsettings.load()
+                conf.pop("_note", None)
+                conf["bot_name"] = name
+                zzsettings.save(conf)
+                zzsettings.reload()
+                log(f"机器人名字已设置：{name}")
+                return self._json({"ok": True, "bot_name": name})
+            except Exception as e:
+                return self._json({"ok": False, "error": f"{type(e).__name__}: {e}"}, 500)
         if self.path.startswith("/api/theme"):
             try:
                 length = int(self.headers.get("Content-Length") or 0)

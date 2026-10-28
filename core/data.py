@@ -577,8 +577,10 @@ def build_snapshot() -> dict:
         },
         "warnings": warnings,
         "journal_meta": jmeta,
+        "bot_name": (conf.get("bot_name") or "").strip(),
         "setup": {
             "needed": not usable,
+            "name_needed": not (conf.get("bot_name") or "").strip(),
             "bot_root": BOT_ROOT,
             "source": ROOT_SOURCE,
             "default": DEFAULT_BOT_ROOT,
