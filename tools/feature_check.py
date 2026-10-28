@@ -266,8 +266,72 @@ def f_diag_and_instance():
     return "诊断字段完整、单实例检测（活/死）正确"
 
 
-def f_bot_name():
+def f_close_pref():
+    """关窗行为偏好：默认退出，可切换为留在托盘，并持久化。"""
+    root = build_root("close")
+    write_db(root, {"甲.txt": (100, "2026-10-27 10:00")})
+    home = os.path.join(TMP, "home_close")
+    os.makedirs(home, exist_ok=True)
+    env = dict(os.environ)
+    env["ZZYANG_DATA_ROOT"] = root
+    env["ZZYANG_DATA_HOME"] = home
+    env["PYTHONIOENCODING"] = "utf-8"
+
+    proc = subprocess.Popen(
+        [PY, APP, "--serve"], cwd=BASE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+        text=True, encoding="utf-8", errors="replace", bufsize=1, env=env,
+    )
+    try:
+        url = None
+        end = time.time() + 15
+        while time.time() < end and url is None:
+            line = proc.stdout.readline()
+            if line and line.strip().startswith("http://"):
+                url = line.strip()
+        assert_(url, "服务未启动")
+
+        def get():
+            with urllib.request.urlopen(url + "api/snapshot", timeout=10) as r:
+                return json.loads(r.read())
+
+        def post(path, payload, allow_error=False):
+            req = urllib.request.Request(
+                url + path, data=json.dumps(payload).encode("utf-8"),
+                headers={"Content-Type": "application/json"}, method="POST",
+            )
+            try:
+                with urllib.request.urlopen(req, timeout=10) as r:
+                    return json.loads(r.read())
+            except urllib.error.HTTPError as e:
+                if not allow_error:
+                    raise
+                return json.loads(e.read())
+
+        snap = get()
+        assert_(snap["settings"].get("close_to_tray") is False, "默认应为关窗即退出")
+
+        r = post("api/prefs", {"close_to_tray": True})
+        assert_(r.get("ok") is True, f"保存失败：{r}")
+        assert_(get()["settings"]["close_to_tray"] is True, "开关没落到快照")
+
+        bad = post("api/prefs", {}, allow_error=True)
+        assert_(bad.get("ok") is False, "空请求应被拒绝")
+
+        cfg = os.path.join(home, "settings.json")
+        with open(cfg, "r", encoding="utf-8") as f:
+            saved = json.load(f)
+        assert_(saved.get("close_to_tray") is True, "设置文件没保存开关")
+    finally:
+        proc.terminate()
+        try:
+            proc.wait(timeout=8)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+
+    return "默认关窗退出，可切换为留在托盘并持久化"
+
     """机器人名字：能保存、能读回、空值拒绝。"""
+def f_bot_name():
     root = build_root("name")
     write_db(root, {"甲.txt": (100, "2026-10-27 10:00")})
     home = os.path.join(TMP, "home_name")
@@ -548,6 +612,7 @@ CASES = [
     ("F-07 主题持久化", f_theme_persist),
     ("F-08 阅读统计", f_reading_stats),
     ("F-09 机器人名字", f_bot_name),
+    ("F-10 关窗行为", f_close_pref),
 ]
 
 

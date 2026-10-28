@@ -171,6 +171,8 @@ function renderShell() {
   const av = $("brandAvatar");
   if (av) av.textContent = botName.slice(-1);
   if ($("nameInput") && document.activeElement !== $("nameInput")) $("nameInput").value = s.bot_name || "";
+  const conf2 = s.settings || {};
+  if ($("switchTray")) $("switchTray").classList.toggle("on", !!conf2.close_to_tray);
 
   const jn = s.journal.length;
   $("jcount").textContent = jn ? jn : "";
@@ -978,6 +980,19 @@ function bind() {
       }
     } catch (e) {}
   };
+  $("switchTray").addEventListener("click", async (ev) => {
+    ev.stopPropagation();
+    const next = !$("switchTray").classList.contains("on");
+    $("switchTray").classList.toggle("on", next);
+    try {
+      await fetch("/api/prefs", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ close_to_tray: next }),
+      });
+    } catch (e) {}
+  });
+
   $("nameInput").addEventListener("change", saveName);
   $("nameInput").addEventListener("keydown", (ev) => {
     if (ev.key === "Enter") { ev.preventDefault(); saveName(); }

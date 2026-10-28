@@ -114,6 +114,7 @@ namespace Zzyang
             string url = args.Length > 0 ? args[0] : "about:blank";
             string dir = AppDomain.CurrentDomain.BaseDirectory;
             string dataDir = args.Length > 1 ? args[1] : Path.Combine(dir, "data");
+            bool trayMode = args.Length > 2 && args[2].Equals("tray", StringComparison.OrdinalIgnoreCase);
 
             string hostLog = Path.Combine(dataDir, "host.log");
             Action<string> note = delegate(string msg)
@@ -269,6 +270,16 @@ namespace Zzyang
                     File.WriteAllText(statePath, form.Left + "," + form.Top + "," + form.Width + "," + form.Height);
                 }
                 catch (Exception) { }
+
+                if (!trayMode)
+                {
+                    // 默认：关窗即退出，避免进程留在后台又找不到托盘图标
+                    exiting = true;
+                    try { File.WriteAllText(trayState, "closed"); } catch (Exception) { }
+                    tray.Visible = false;
+                    tray.Dispose();
+                    return;
+                }
 
                 if (!exiting)
                 {

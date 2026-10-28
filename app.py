@@ -105,6 +105,25 @@ class Handler(SimpleHTTPRequestHandler):
         return super().do_GET()
 
     def do_POST(self):
+        if self.path.startswith("/api/prefs"):
+            try:
+                length = int(self.headers.get("Content-Length") or 0)
+                payload = json.loads(self.rfile.read(length) or b"{}")
+                conf = zzsettings.load()
+                conf.pop("_note", None)
+                changed = {}
+                for key in ("close_to_tray", "transparent"):
+                    if isinstance(payload.get(key), bool):
+                        conf[key] = payload[key]
+                        changed[key] = payload[key]
+                if not changed:
+                    return self._json({"ok": False, "error": "没有可保存的项"}, 400)
+                zzsettings.save(conf)
+                zzsettings.reload()
+                log(f"偏好已保存：{changed}")
+                return self._json({"ok": True, "prefs": changed})
+            except Exception as e:
+                return self._json({"ok": False, "error": f"{type(e).__name__}: {e}"}, 500)
         if self.path.startswith("/api/name"):
             try:
                 length = int(self.headers.get("Content-Length") or 0)
@@ -325,7 +344,11 @@ def launch_window(url: str) -> None:
         Handler.first_hit_at = 0.0
         log(f"启动原生窗口: {host} -> {url}")
         try:
-            proc = subprocess.Popen([host, url, data_dir], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            tray_mode = "tray" if zzsettings.load().get("close_to_tray") else "exit"
+            proc = subprocess.Popen(
+                [host, url, data_dir, tray_mode],
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+            )
         except Exception as e:
             log(f"原生窗口启动失败：{e}")
             proc = None

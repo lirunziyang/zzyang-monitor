@@ -18,6 +18,7 @@ DEFAULTS = {
     "bot_name": "",
     "theme": "xuantan",
     "transparent": True,
+    "close_to_tray": False,
     "refresh_seconds": 30,
     "active_minutes": 30,
     "quiet_minutes": 90,
@@ -54,6 +55,10 @@ def _sanitize(raw: dict) -> dict:
     tr = raw.get("transparent")
     if isinstance(tr, bool):
         out["transparent"] = tr
+
+    ct = raw.get("close_to_tray")
+    if isinstance(ct, bool):
+        out["close_to_tray"] = ct
 
     for key, (lo, hi) in LIMITS.items():
         if key not in raw:
