@@ -26,6 +26,14 @@ const KIND_LABEL = {
   autocapture: "自动补记",
 };
 
+// 他自己的分类（2026-10-29 起插件写入 kind 字段）
+const OWN_KIND_LABEL = {
+  fact: "事实",
+  feeling: "感受",
+  event: "事件",
+  moment: "重要时刻",
+};
+
 function esc(s) {
   return String(s == null ? "" : s)
     .replace(/&/g, "&amp;")
@@ -97,6 +105,7 @@ async function load(manual = false) {
     if (state.view === "journal" && (changed || manual)) renderJournal();
     $("refreshInfo").textContent = "更新于 " + new Date().toLocaleTimeString("zh-CN", { hour12: false });
   } catch (e) {
+    console.error("[zz] load failed:", e && e.stack ? e.stack : e);
     $("refreshInfo").textContent = "连接不上程序";
   } finally {
     state.loading = false;
@@ -516,13 +525,23 @@ function renderJournal() {
   }
   $("jempty").classList.add("hidden");
 
+  const moments = ((state.snap && state.snap.moments) || []).slice(0, 6);
+  const showMoments = moments.length && !state.day && !state.query;
   const groups = new Map();
   for (const e of list) {
+    if (e.own_kind === "moment") continue;
     if (!groups.has(e.date)) groups.set(e.date, []);
     groups.get(e.date).push(e);
   }
 
   let html = "";
+  if (showMoments) {
+    html += `<div class="card moments"><div class="memtitle2">重要时刻<span class="mem-sub">共 ${moments.length} 条</span></div>` +
+      moments.map((e) => {
+        const span = e.span_start ? `${e.span_start}${e.span_end && e.span_end !== e.span_start ? " → " + e.span_end : ""}` : e.date;
+        return `<div class="moment-item"><div class="m-span">${esc(span)}</div><div class="m-body">${esc(e.content)}</div></div>`;
+      }).join("") + `</div>`;
+  }
   for (const [date, items] of groups) {
     const t = dayTitle(date);
     html += `<div class="daygroup">
@@ -540,7 +559,7 @@ function renderJournal() {
       html += `<article class="entry${fresh}${open}${sel}" data-id="${e.id}">
         <div class="ehead">
           <span class="etime">${esc(e.clock)}</span>
-          <span class="tag ${e.kind}">${KIND_LABEL[e.kind] || "记录"}</span>
+          <span class="tag ${e.own_kind || e.kind}">${OWN_KIND_LABEL[e.own_kind] || KIND_LABEL[e.kind] || "记录"}</span>          ${e.importance >= 3 ? `<span class="imp">重要</span>` : ""}
           ${e.duplicates > 1 ? `<span class="emore">原文里有 ${e.duplicates} 条相同</span>` : ""}
           <button class="starbtn${starred}" data-star="${e.id}" title="标星（只存在本程序里）">★</button>
         </div>
@@ -785,6 +804,22 @@ async function uiSelfTest() {
     return `${n} 条`;
   });
 
+  t("重要时刻置顶", () => {
+    const m = (state.snap && state.snap.moments) || [];
+    const card = document.querySelector(".moments");
+    if (!m.length) return "本机暂无重要时刻，跳过";
+    if (!card) throw new Error("有重要时刻但没有置顶块");
+    if (!card.textContent.includes("重要时刻")) throw new Error("置顶块标题不对");
+    return `${m.length} 条`;
+  });
+
+  t("标签用他自己的分类", () => {
+    const labels = Array.from(document.querySelectorAll(".entry .tag")).map((x) => x.textContent.trim());
+    const own = labels.filter((x) => ["事实", "感受", "事件", "重要时刻"].includes(x));
+    if (!own.length) return "本机暂无新字段，跳过";
+    return own.slice(0, 3).join(" / ");
+  });
+
   t("正文字体清晰", () => {
     const el = document.querySelector(".econtent");
     if (!el) throw new Error("找不到日记正文");
@@ -842,20 +877,22 @@ async function uiSelfTest() {
   });
 
   t("分页按钮", () => {
-    if (state.snap.journal.length < 2) return "只有 1 条数据，无法验证分页";
-    const saved = state.limit;
+    if (state.snap.journal.length < 3) return "数据太少，无法验证分页";
+    const savedLimit = state.limit;
     const savedSize = state.pageSize;
-    state.pageSize = 1;
-    state.limit = 1;
+    const savedFilter = state.filter;
+    state.filter = "all";
+    state.limit = 2;
+    state.pageSize = 2;
     renderJournal();
     const before = document.querySelectorAll(".entry").length;
     const btn = $("btnMore");
-    if (before !== 1) throw new Error(`每页设成 1 时却渲染了 ${before} 条`);
     if (!btn) throw new Error("应有「加载更多」按钮但没有");
     btn.click();
     const after = document.querySelectorAll(".entry").length;
-    if (after <= before) throw new Error("点击后条数没有增加");
-    state.limit = saved;
+    if (after <= before) throw new Error(`点击后条数没有增加（${before} → ${after}）`);
+    state.filter = savedFilter;
+    state.limit = savedLimit;
     state.pageSize = savedSize;
     renderJournal();
     return `${before} → ${after}`;

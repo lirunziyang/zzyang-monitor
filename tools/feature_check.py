@@ -268,6 +268,38 @@ def f_diag_and_instance():
 
 
 
+
+def f_journal_own_kind():
+    """日记要带上他自己的 kind/importance，moment 单独成组。"""
+    root = build_root("ownkind")
+    rows = [
+        {"time": "2026-10-29 18:00", "content": "一条感受", "kind": "feeling", "importance": 2},
+        {"time": "2026-10-29 19:00", "content": "一件发生的事", "kind": "event", "importance": 2},
+        {"time": "2026-10-29 20:00", "content": "一个重要时刻", "kind": "moment", "importance": 3,
+         "span_start": "2026-10-25", "span_end": "2026-10-29"},
+        {"time": "2026-10-29 21:00", "content": "一条事实", "kind": "fact", "importance": 1},
+    ]
+    jpath = os.path.join(root, "plugins/astrbot_plugin_edge_tts/data/journal.jsonl")
+    with open(jpath, "w", encoding="utf-8") as f:
+        for r in rows:
+            r["id"] = "id_" + r["kind"]
+            f.write(json.dumps(r, ensure_ascii=False) + "\n")
+
+    snap = run_check(root)
+    by_content = {e["content"]: e for e in snap["journal"]}
+    assert_(len(by_content) == 4, f"应有 4 条，实际 {len(by_content)}")
+
+    feel = by_content["一条感受"]
+    assert_(feel["own_kind"] == "feeling", f"own_kind 丢了：{feel.get('own_kind')}")
+    assert_(feel["importance"] == 2, f"importance 丢了：{feel.get('importance')}")
+    assert_(feel["own_id"] == "id_feeling", f"他的 id 丢了：{feel.get('own_id')}")
+
+    moments = snap["moments"]
+    assert_(len(moments) == 1, f"重要时刻应有 1 条，实际 {len(moments)}")
+    m = moments[0]
+    assert_(m["content"] == "一个重要时刻", "重要时刻内容不对")
+    assert_(m["span_start"] == "2026-10-25" and m["span_end"] == "2026-10-29", "起止日期丢了")
+    return "4 条带 kind/importance/id，moment 单独成组"
 def f_memory_full():
     """记忆页三件套：最近几天 + 短期池 + 长期条目都要读出来。"""
     root = build_root("memfull")
@@ -761,6 +793,7 @@ CASES = [
     ("F-12 字数以进度为准", f_chars_follow_position),
     ("F-13 新书可见", f_new_book_visible),
     ("F-14 记忆全貌", f_memory_full),
+    ("F-15 日记自带分类", f_journal_own_kind),
 ]
 
 

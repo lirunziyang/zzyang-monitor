@@ -982,3 +982,38 @@ mark { background: rgba(216, 178, 115, .26); color: #ffe9c9; border-radius: 3px;
 .mem-item.s-trash .m-text { color: var(--text-3); text-decoration: line-through; }
 .mem-item.s-temp .m-text { color: var(--text); }
 .mem-more { font-size: 11.5px; color: var(--text-3); padding-top: 10px; }
+
+/* ---------- 日记：重要时刻与他的分类 ---------- */
+.moments { margin-bottom: 14px; }
+.moment-item {
+  display: grid;
+  grid-template-columns: 150px 1fr;
+  gap: 14px;
+  padding: 9px 0;
+  border-top: 1px solid var(--stroke);
+}
+.moment-item:first-of-type { border-top: 0; padding-top: 2px; }
+.m-span {
+  font-size: 11.5px;
+  color: var(--accent);
+  font-variant-numeric: tabular-nums;
+  padding-top: 3px;
+}
+.m-body {
+  font-family: var(--font-read);
+  font-size: 14.5px;
+  line-height: 1.8;
+  color: var(--text);
+}
+.imp {
+  font-size: 10px;
+  color: var(--accent);
+  border: 1px solid var(--accent-line);
+  background: var(--accent-soft);
+  border-radius: 5px;
+  padding: 1px 6px;
+}
+.tag.fact { color: #9fd8c4; background: rgba(127, 216, 196, .10); border-color: rgba(127, 216, 196, .22); }
+.tag.feeling { color: #c9b0e0; background: rgba(180, 150, 210, .10); border-color: rgba(180, 150, 210, .22); }
+.tag.event { color: var(--accent); background: var(--accent-soft); border-color: var(--accent-line); }
+.tag.moment { color: var(--warm); background: var(--warm-soft); border-color: rgba(216, 178, 115, .30); }
