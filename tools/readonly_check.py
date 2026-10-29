@@ -50,6 +50,23 @@ try:
 except OSError:
     pass
 
+# 日记回收站、书库笔记、书库正文：都只读，纳入元信息比对
+for _extra in (
+    os.path.join(_DATA_DIR, "journal_trash.jsonl"),
+    os.path.join(_DATA_DIR, "book_notes"),
+    os.path.join(_DATA_DIR, "books"),
+):
+    if os.path.isfile(_extra):
+        META.append(_extra)
+    elif os.path.isdir(_extra):
+        try:
+            for _n in sorted(os.listdir(_extra)):
+                _p = os.path.join(_extra, _n)
+                if os.path.isfile(_p):
+                    META.append(_p)
+        except OSError:
+            pass
+
 STRICT = [p for p in STRICT if os.path.exists(p)]
 META = [p for p in META if os.path.exists(p)]
 
@@ -130,6 +147,37 @@ def structure_checks(snap: dict) -> list:
     mem = snap.get("memory") or {}
     ok = all(k in mem for k in ("exists", "sections", "chars"))
     out.append(("记忆档案", ok, f"{len(mem.get('sections', []))} 段 / {mem.get('chars', 0)} 字"))
+
+
+    # 4.1 短期记忆结构
+    short = (mem.get("short") or {})
+    if short.get("exists"):
+        ok = isinstance(short.get("items"), list)
+        out.append(("短期记忆", ok, f"{short.get('total', 0)} 条 {short.get('counts')}"))
+    else:
+        out.append(("短期记忆", True, "文件不存在，跳过"))
+
+    # 4.2 长期记忆结构
+    longm = (mem.get("long") or {})
+    if longm.get("exists"):
+        ok = isinstance(longm.get("recent"), list)
+        out.append(("长期记忆", ok, f"{longm.get('total', 0)} 条 {longm.get('kinds')}"))
+    else:
+        out.append(("长期记忆", True, "目录不存在，跳过"))
+
+    # 4.3 记忆健康字段
+    health = mem.get("health")
+    if not isinstance(health, dict) or not health:
+        out.append(("记忆健康", True, "快照里没有健康数据，跳过"))
+    else:
+        ok = bool(health.get("curation")) and bool(health.get("short"))
+        out.append(("记忆健康", ok, "字段齐全" if ok else "缺 curation/short"))
+
+    # 4.4 书库正文
+    try:
+        out.append(("书库正文", True, f"{len(botdata.list_book_files())} 本可读"))
+    except Exception as e:
+        out.append(("书库正文", False, str(e)))
 
     # 5. 设置项
     st = snap.get("settings") or {}
