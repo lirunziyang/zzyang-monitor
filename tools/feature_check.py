@@ -321,8 +321,8 @@ def f_no_browser_fallback():
     home = os.path.join(TMP, "home_fallback")
     os.makedirs(home, exist_ok=True)
 
-    # 造一个立刻以 0 退出的假宿主
-    fake_dir = os.path.join(TMP, "fakehost")
+    # 造一个立刻以 0 退出的假宿主（放在仓库里的固定目录，避免被清理或权限限制）
+    fake_dir = os.path.join(BASE, "tests", ".fakehost")
     os.makedirs(fake_dir, exist_ok=True)
     src = os.path.join(fake_dir, "fake.cs")
     with open(src, "w", encoding="utf-8") as f:
@@ -331,7 +331,7 @@ def f_no_browser_fallback():
     csc = r"C:\Windows\Microsoft.NET\Framework64\v4.0.30319\csc.exe"
     assert_(os.path.exists(csc), "没有 csc.exe，无法做这个测试")
     r = subprocess.run([csc, "/nologo", "/out:" + exe, src], capture_output=True)
-    assert_(os.path.exists(exe), f"假宿主编译失败：{r.stderr[:200]}")
+    assert_(os.path.exists(exe), f"假宿主编译失败：rc={r.returncode} out={(r.stdout or b"")[:200]} err={(r.stderr or b"")[:200]}")
 
     spec = importlib.util.spec_from_file_location("zzapp_probe", APP)
     mod = importlib.util.module_from_spec(spec)

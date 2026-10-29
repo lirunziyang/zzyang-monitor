@@ -1,0 +1,1 @@
+class P { static int Main(string[] a) { return 0; } }
