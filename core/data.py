@@ -32,6 +32,8 @@ PROFILE_META = ""
 PLUGIN_CFG = ""
 DB = ""
 BOOKS_DIR = ""
+READING_LOG = ""
+NOTES_DIR = ""
 ROOT_SOURCE = ""
 
 TIME_FMT = "%Y-%m-%d %H:%M"
@@ -39,7 +41,7 @@ TIME_FMT = "%Y-%m-%d %H:%M"
 
 def _derive(root: str) -> None:
     """由 BOT_ROOT 推导出所有具体路径。"""
-    global BOT_ROOT, PLUGIN_DATA, JOURNAL, PROFILE_META, PLUGIN_CFG, DB, BOOKS_DIR
+    global BOT_ROOT, PLUGIN_DATA, JOURNAL, PROFILE_META, PLUGIN_CFG, DB, BOOKS_DIR, READING_LOG, NOTES_DIR
     BOT_ROOT = root
     PLUGIN_DATA = os.path.join(root, "plugins", "astrbot_plugin_edge_tts", "data")
     JOURNAL = os.path.join(PLUGIN_DATA, "journal.jsonl")
@@ -47,6 +49,8 @@ def _derive(root: str) -> None:
     PLUGIN_CFG = os.path.join(root, "config", "astrbot_plugin_edge_tts_config.json")
     DB = os.path.join(root, "data_v4.db")
     BOOKS_DIR = os.path.join(PLUGIN_DATA, "books")
+    READING_LOG = os.path.join(PLUGIN_DATA, "reading_log.jsonl")
+    NOTES_DIR = os.path.join(PLUGIN_DATA, "book_notes")
 
 
 def resolve_root_input(path: str):
@@ -210,6 +214,79 @@ def read_journal() -> list[dict]:
     return entries
 
 
+def read_reading_log() -> list[dict]:
+    """读插件写的机器可读读书日志，转成与日记同构的条目（只用于展示与统计）。"""
+    out: list[dict] = []
+    if not os.path.exists(READING_LOG):
+        return out
+    try:
+        f = open(READING_LOG, "r", encoding="utf-8", errors="replace")
+    except OSError:
+        return out
+    with f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                row = json.loads(line)
+            except Exception:
+                continue
+            ts = parse_ts(str(row.get("time") or ""))
+            book = str(row.get("book") or "").strip()
+            if not ts or not book:
+                continue
+            try:
+                start, end = int(row.get("start") or 0), int(row.get("end") or 0)
+            except (TypeError, ValueError):
+                continue
+            content = f"（自己读了会儿书）《{book}》第 {start}–{end} 字"
+            out.append({
+                "id": entry_id(str(row.get("time")), content),
+                "time": str(row.get("time")),
+                "ts": ts.timestamp(),
+                "date": ts.strftime("%Y-%m-%d"),
+                "clock": ts.strftime("%H:%M"),
+                "content": content,
+                "kind": "read",
+                "auto": True,
+                "duplicates": 1,
+                "chars": len(content),
+            })
+    out.sort(key=lambda x: (x["ts"], x["time"]), reverse=True)
+    return out
+
+
+def read_book_notes() -> list[dict]:
+    """读书笔记（独立书库），每本一条记录，只读。"""
+    out: list[dict] = []
+    if not os.path.isdir(NOTES_DIR):
+        return out
+    for fn in sorted(os.listdir(NOTES_DIR)):
+        if not fn.endswith(".jsonl"):
+            continue
+        items: list[dict] = []
+        try:
+            with open(os.path.join(NOTES_DIR, fn), "r", encoding="utf-8", errors="replace") as f:
+                for line in f:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    try:
+                        row = json.loads(line)
+                    except Exception:
+                        continue
+                    c = str(row.get("content") or "").strip()
+                    if c:
+                        items.append({"time": str(row.get("time") or ""), "content": c})
+        except OSError:
+            continue
+        if items:
+            out.append({"book": fn[:-6], "count": len(items), "items": items[-50:]})
+    out.sort(key=lambda x: (x["items"][-1].get("time") or ""), reverse=True)
+    return out
+
+
 def _db():
     con = sqlite3.connect(f"file:{DB}?mode=ro", uri=True, timeout=3.0)
     con.row_factory = sqlite3.Row
@@ -274,10 +351,47 @@ def read_sessions(journal: list[dict]) -> dict:
     return stats
 
 
+# 书库字数缓存：按「路径 + 修改时间 + 大小」判断是否要重读，
+# 避免每次刷新都去读几 MB 的 txt
+_BOOK_TOTAL_CACHE: dict[tuple, int] = {}
+
+
+def _book_total(path: str) -> int:
+    try:
+        st = os.stat(path)
+    except OSError:
+        return 0
+    key = (path, st.st_mtime_ns, st.st_size)
+    if key in _BOOK_TOTAL_CACHE:
+        return _BOOK_TOTAL_CACHE[key]
+    try:
+        with open(path, "r", encoding="utf-8", errors="replace") as f:
+            total = len(f.read())
+    except Exception:
+        total = 0
+    _BOOK_TOTAL_CACHE[key] = total
+    return total
+
+
+def list_book_files() -> list[str]:
+    """书库目录里实际存在的书（以目录为准，新加的书也要算进来）。"""
+    names = []
+    try:
+        for name in os.listdir(BOOKS_DIR):
+            if not name.lower().endswith((".txt", ".md")):
+                continue
+            if os.path.isfile(os.path.join(BOOKS_DIR, name)):
+                names.append(name)
+    except OSError:
+        return []
+    return names
+
+
 def read_reading_all(pref: dict | None = None) -> list[dict]:
-    """所有在读的书，按最后翻页时间倒序。"""
+    """书架：以书库目录为准，进度有就读出来，没有就显示为 0%。"""
     pref = pref if pref is not None else read_preferences()
-    books = []
+
+    progress: dict[str, dict] = {}
     for k, v in pref.items():
         if ":book_pos:" not in k:
             continue
@@ -286,26 +400,33 @@ def read_reading_all(pref: dict | None = None) -> list[dict]:
             pos = int(v.get("val") or 0)
         except (TypeError, ValueError):
             pos = 0
-        info = {
-            "book": name,
-            "pos": pos,
-            "total": 0,
-            "updated_at": v.get("updated_at") or "",
-            "percent": 0.0,
-        }
+        progress[name] = {"pos": pos, "updated_at": v.get("updated_at") or ""}
+
+    names = set(progress) | set(list_book_files())
+    books = []
+    for name in names:
         path = os.path.join(BOOKS_DIR, name)
-        if os.path.exists(path):
+        info = {"book": name, "pos": 0, "total": 0, "updated_at": "", "percent": 0.0}
+        p = progress.get(name)
+        if p:
+            info["pos"] = p["pos"]
+            info["updated_at"] = p["updated_at"]
+        info["total"] = _book_total(path)
+        if not info["updated_at"] and info["total"]:
+            # 还没读过的新书：用文件修改时间排序，让它出现在列表里
             try:
-                with open(path, "r", encoding="utf-8", errors="replace") as f:
-                    info["total"] = len(f.read())
-            except Exception:
+                info["updated_at"] = time.strftime(
+                    "%Y-%m-%d %H:%M:%S", time.localtime(os.path.getmtime(path))
+                )
+            except OSError:
                 pass
         if info["total"]:
-            info["percent"] = round(pos / info["total"] * 100, 1)
+            info["percent"] = round(info["pos"] / info["total"] * 100, 1)
         books.append(info)
-    books.sort(key=lambda b: b["updated_at"] or "", reverse=True)
-    return books
 
+    # 读过的书（有进度）排在前面，其余按时间倒序
+    books.sort(key=lambda b: (1 if b["pos"] > 0 else 0, b["updated_at"] or ""), reverse=True)
+    return books
 
 def read_reading(pref: dict | None = None) -> dict:
     books = read_reading_all(pref)
@@ -405,9 +526,16 @@ def build_snapshot() -> dict:
         warnings.insert(0, "还没有指定机器人数据目录（点右上角「设置路径」）")
 
     journal, jmeta = read_journal_detailed()
+    reads = read_reading_log()
+    if reads:
+        merged = {e['id']: e for e in journal}
+        for r in reads:
+            merged.setdefault(r['id'], r)
+        journal = sorted(merged.values(), key=lambda x: (x['ts'], x['time']), reverse=True)
     cfg = read_config()
     prefs, pmeta = read_preferences_detailed()
     books = read_reading_all(prefs)
+    notes = read_book_notes()
     sessions = read_sessions(journal)
     for b in books:
         s = sessions.get(b["book"]) or {}
@@ -547,6 +675,7 @@ def build_snapshot() -> dict:
             "updated_at": reading.get("updated_at", ""),
         },
         "books": books,
+        "notes": notes,
         "reading_stats": {
             "sessions": sum(b.get("sessions", 0) for b in books),
             # 字数以进度为准（读到第几字），没有进度的书才回退到日记统计，

@@ -130,9 +130,13 @@ def structure_checks(snap: dict) -> list:
     return out
 
 
-def verbatim_check(snap: dict) -> tuple:
-    """界面拿到的日记正文必须与文件里的原文一致（只允许 strip 空白）。"""
-    raw = []
+def _journal_texts() -> tuple[set, set]:
+    """返回（日记原文集合，读书记录集合）。
+
+    读书记录由插件单独写在 reading_log.jsonl 里，界面上的文案是程序按
+    「书名 + 起止字」拼出来的，所以要和日志字段逐一对应，不能拿去和日记比对。
+    """
+    raw: set = set()
     try:
         with open(botdata.JOURNAL, "r", encoding="utf-8", errors="replace") as f:
             for line in f:
@@ -145,17 +149,55 @@ def verbatim_check(snap: dict) -> tuple:
                     continue
                 content = str(row.get("content") or "").strip()
                 if content:
-                    raw.append(content)
+                    raw.add(content)
     except OSError:
-        return ("日记原文一致", True, "日记文件不存在，跳过")
+        pass
 
-    raw_set = set(raw)
-    bad = [e for e in snap.get("journal", []) if e.get("content", "").strip() not in raw_set]
+    reads: set = set()
+    try:
+        with open(botdata.READING_LOG, "r", encoding="utf-8", errors="replace") as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    row = json.loads(line)
+                except Exception:
+                    continue
+                book = str(row.get("book") or "").strip()
+                if not book:
+                    continue
+                try:
+                    start, end = int(row.get("start") or 0), int(row.get("end") or 0)
+                except (TypeError, ValueError):
+                    continue
+                reads.add(f"（自己读了会儿书）《{book}》第 {start}–{end} 字")
+    except OSError:
+        pass
+    return raw, reads
+
+
+def verbatim_check(snap: dict) -> tuple:
+    """界面拿到的正文必须能追回源文件：日记对日记文件，读书对读书日志。"""
+    raw, reads = _journal_texts()
+    if not raw and not reads:
+        return ("日记原文一致", True, "源文件不存在，跳过")
+
+    bad = []
+    for e in snap.get("journal", []):
+        text = str(e.get("content", "")).strip()
+        pool = reads if e.get("kind") == "read" else raw
+        if text not in pool:
+            bad.append(e)
+
     if bad:
-        sample = bad[0].get("content", "")[:24]
-        return ("日记原文一致", False, f"{len(bad)} 条正文与原文不符，例如「{sample}」")
-    return ("日记原文一致", True, f"{len(snap.get('journal', []))} 条逐字一致")
-
+        sample = str(bad[0].get("content", ""))[:24]
+        return ("日记原文一致", False, f"{len(bad)} 条正文追不回源文件，例如「{sample}」")
+    return (
+        "日记原文一致",
+        True,
+        f"{len(snap.get('journal', []))} 条逐字一致（日记 {len(raw)} / 读书 {len(reads)}）",
+    )
 
 def compare(before: dict, after: dict) -> list:
     rows = []

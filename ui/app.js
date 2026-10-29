@@ -93,6 +93,7 @@ async function load(manual = false) {
     renderShell();
     if (state.view === "home") renderHome();
     else if (state.view === "memory") renderMemory();
+    else if (state.view === "books") renderBooks();
     if (state.view === "journal" && (changed || manual)) renderJournal();
     $("refreshInfo").textContent = "更新于 " + new Date().toLocaleTimeString("zh-CN", { hour12: false });
   } catch (e) {
@@ -192,11 +193,14 @@ function renderShell() {
     $("setupOverlay").classList.add("hidden");
   }
 
-  $("viewTitle").textContent = state.view === "home" ? "他现在在干什么" : state.view === "memory" ? "记忆档案" : "它写的日记";
+  $("viewTitle").textContent =
+    state.view === "home" ? "他现在在干什么" : state.view === "memory" ? "记忆档案" : state.view === "books" ? "它读的书" : "它写的日记";
   if (state.view === "home") {
     $("viewSub").textContent = "从它留下的痕迹推断，不是实时状态";
   } else if (state.view === "memory") {
     $("viewSub").textContent = "只读 · 它自己整理的那份记录";
+  } else if (state.view === "books") {
+    $("viewSub").textContent = "只读 · 书架进度与它写的读书笔记";
   } else {
     const n = filtered().length;
     if (state.query) $("viewSub").textContent = `找到 ${n} 条含「${state.query}」的记录`;
@@ -257,7 +261,7 @@ function renderHome() {
         `<div class="${cls}">` +
         `<span class="bname2">《${esc(name)}》</span>` +
         `<span class="bpct">${pct}%</span>` +
-        `<span class="bmeta">读了 ${cnt} 次 · ${chars} 字</span>` +
+        `<span class="bmeta">${cnt ? `读了 ${cnt} 次 · ${chars} 字` : "还没开始读"}</span>` +
         `<span class="btime">${esc((x.last_session || x.updated_at || "").slice(5, 16))}</span>` +
         `</div>`
       );
@@ -334,6 +338,47 @@ function renderMemory() {
         </div>`
     )
     .join("");
+}
+
+/* ---------------- 书库 ---------------- */
+
+function renderBooks() {
+  const s = state.snap || {};
+  const notes = s.notes || [];
+  const books = s.books || [];
+  const box = $("bookList");
+  if (!box) return;
+  const noteCount = notes.reduce((a, b) => a + (b.count || 0), 0);
+  $("booksHint").textContent = noteCount
+    ? "笔记是它想写才写的，独立存放，不进入对话记忆。"
+    : "它还没写过读书笔记——不写也正常。";
+  $("booksMeta").innerHTML = `${books.length} 本<br>${noteCount} 条笔记`;
+
+  const rows = books
+    .map(
+      (b) =>
+        `<div class="memline">《${esc(b.book)}》 ${b.percent || 0}%${
+          b.total ? `（${b.pos || 0}/${b.total} 字）` : ""
+        }</div>`
+    )
+    .join("");
+
+  const noteBox = notes
+    .map(
+      (n) => `<div class="card memsec">
+        <div class="memtitle2">《${esc(n.book)}》 · ${n.count} 条笔记</div>
+        ${n.items
+          .slice()
+          .reverse()
+          .map((it) => `<div class="memline"><span class="tiny">${esc(it.time)}</span> ${esc(it.content)}</div>`)
+          .join("")}
+      </div>`
+    )
+    .join("");
+
+  box.innerHTML =
+    `<div class="card memsec"><div class="memtitle2">阅读进度</div>${rows || '<div class="memline">书架是空的</div>'}</div>` +
+    noteBox;
 }
 
 /* ---------------- 日记 ---------------- */
@@ -507,9 +552,11 @@ function setView(v) {
   $("viewHome").classList.toggle("hidden", v !== "home");
   $("viewJournal").classList.toggle("hidden", v !== "journal");
   $("viewMemory").classList.toggle("hidden", v !== "memory");
+  $("viewBooks").classList.toggle("hidden", v !== "books");
   renderShell();
   if (v === "home") renderHome();
   else if (v === "memory") renderMemory();
+  else if (v === "books") renderBooks();
   else renderJournal();
 }
 

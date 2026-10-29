@@ -35,6 +35,9 @@
       <button class="navitem" data-view="memory">
         <span class="nic">忆</span><span>记忆档案</span>
       </button>
+      <button class="navitem" data-view="books">
+        <span class="nic">书</span><span>书库</span>
+      </button>
     </nav>
 
     <div class="settings-wrap">
@@ -189,6 +192,19 @@
         <div class="memmeta" id="memMeta"></div>
       </div>
       <div id="memSections"></div>
+    </section>
+
+    <!-- 书库 -->
+    <section id="viewBooks" class="view hidden">
+      <div class="card memhead">
+        <div>
+          <div class="kicker">它自己的书</div>
+          <div class="memtitle">书架与读书笔记</div>
+          <div class="memhint" id="booksHint">笔记是它想写才写的，不强制。</div>
+        </div>
+        <div class="memmeta" id="booksMeta"></div>
+      </div>
+      <div id="bookList"></div>
     </section>
 
     <!-- 日记 -->

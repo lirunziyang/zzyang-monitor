@@ -86,10 +86,18 @@ class Handler(SimpleHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    def _origin_ok(self) -> bool:
+        """只接受来自本机的请求，挡掉 DNS rebinding 之类的跨站读取。"""
+        host = (self.headers.get("Host") or "").strip().lower()
+        host = host.rsplit(":", 1)[0] if host.count(":") == 1 else host
+        return host in ("127.0.0.1", "localhost", "::1", "[::1]")
+
     def do_GET(self):
         if not Handler.first_hit_at:
             Handler.first_hit_at = time.time()
         Handler.hits += 1
+        if not self._origin_ok():
+            return self._json({"ok": False, "error": "forbidden host"}, 403)
         if self.path.startswith("/api/diag"):
             return self._json(diag_payload())
         if self.path.startswith("/api/snapshot"):
@@ -105,6 +113,8 @@ class Handler(SimpleHTTPRequestHandler):
         return super().do_GET()
 
     def do_POST(self):
+        if not self._origin_ok():
+            return self._json({"ok": False, "error": "forbidden host"}, 403)
         if self.path.startswith("/api/prefs"):
             try:
                 length = int(self.headers.get("Content-Length") or 0)

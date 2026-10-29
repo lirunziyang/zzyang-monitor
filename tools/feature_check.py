@@ -267,6 +267,28 @@ def f_diag_and_instance():
 
 
 
+def f_new_book_visible():
+    """书库里新加的书，就算还没进度，也要出现在书架上。"""
+    root = build_root("newbook")
+    write_db(root, {"甲书.txt": (500, "2026-10-27 20:00")})
+    # 再放一本没有进度记录的新书
+    books_dir = os.path.join(root, "plugins/astrbot_plugin_edge_tts/data/books")
+    with open(os.path.join(books_dir, "乙书.txt"), "w", encoding="utf-8") as f:
+        f.write("字" * 2000)
+
+    snap = run_check(root)
+    names = [b["book"] for b in snap["books"]]
+    assert_("乙书.txt" in names, f"新书没出现，书单是 {names}")
+    assert_(len(names) == 2, f"应该有 2 本，实际 {names}")
+    assert_(snap["books"][0]["book"] == "甲书.txt", "有进度的书应排前面")
+
+    newbie = [b for b in snap["books"] if b["book"] == "乙书.txt"][0]
+    assert_(newbie["pos"] == 0, "新书进度应为 0")
+    assert_(newbie["total"] == 2000, f"新书字数应为 2000，实际 {newbie['total']}")
+    assert_(newbie["percent"] == 0.0, "新书百分比应为 0")
+    assert_(snap["reading_stats"]["books"] == 2, "总览里的书架数应为 2")
+    return "无进度的新书也列出（0%），有进度的仍排第一"
+
 def f_chars_follow_position():
     """总览字数以进度为准：进度领先日记时，以进度数字为准。"""
     root = build_root("poswin")
@@ -683,6 +705,7 @@ CASES = [
     ("F-10 关窗行为", f_close_pref),
     ("F-11 不回退浏览器", f_no_browser_fallback),
     ("F-12 字数以进度为准", f_chars_follow_position),
+    ("F-13 新书可见", f_new_book_visible),
 ]
 
 
