@@ -315,6 +315,22 @@ def read_short_memory() -> dict:
     return out
 
 
+def _epoch_text(value) -> str:
+    """长期记忆的时间可能是毫秒时间戳，转成 2026-10-29 20:29。"""
+    if value is None:
+        return ""
+    text = str(value).strip()
+    if not text:
+        return ""
+    if text.isdigit():
+        try:
+            seconds = float(text) / 1000.0 if len(text) > 11 else float(text)
+            return time.strftime("%Y-%m-%d %H:%M", time.localtime(seconds))
+        except (ValueError, OSError):
+            return text
+    return text
+
+
 def read_long_memory(limit_recent: int = 40, limit_top: int = 8) -> dict:
     """长期记忆：只给分布 + 最近若干条 + 被想起最多的几条。"""
     folder = os.path.join(_data_dir(), "long_memory")
@@ -350,7 +366,7 @@ def read_long_memory(limit_recent: int = 40, limit_top: int = 8) -> dict:
             rows.append({
                 "content": content,
                 "kind": kind,
-                "created": str(it.get("created") or it.get("createTime") or ""),
+                "created": _epoch_text(it.get("created") or it.get("createTime")),
                 "hits": int(it.get("hits") or 0),
             })
         if not out["updated_at"]:
@@ -364,3 +380,77 @@ def read_long_memory(limit_recent: int = 40, limit_top: int = 8) -> dict:
     out["recent"] = by_time[:limit_recent]
     out["top"] = sorted(rows, key=lambda r: r["hits"], reverse=True)[:limit_top]
     return out
+
+def memory_health(short: dict, recent: dict, long_mem: dict, journal: list) -> dict:
+    """记忆健康：整理有没有跑、档案多久没刷、短期池是否积压。只读推断。"""
+    now = time.localtime()
+    today = time.strftime("%Y-%m-%d", now)
+    yesterday = time.strftime("%Y-%m-%d", time.localtime(time.time() - 86400))
+    after_curation = (now.tm_hour, now.tm_min) >= (22, 30)
+
+    # 每晚 22:30 自审：最后一次整理的日子
+    last_day = ""
+    try:
+        with open(short.get("path", ""), "r", encoding="utf-8-sig", errors="replace") as f:
+            last_day = str(json.load(f).get("last_curation_day") or "")
+    except Exception:
+        last_day = ""
+
+    if not last_day:
+        curation_missed = after_curation  # 今天还没到点就不算漏
+        curation_note = "还没记录过整理时间"
+    elif last_day < yesterday:
+        curation_missed = True
+        curation_note = f"已经 {_days_between(last_day, today)} 天没有整理"
+    elif last_day == yesterday and after_curation:
+        curation_missed = True
+        curation_note = "今天 22:30 的整理还没跑"
+    else:
+        curation_missed = False
+        curation_note = "按时整理"
+
+    # 最近几天档案：每天 21:30
+    recent_age_h = None
+    if recent.get("path") and os.path.exists(recent["path"]):
+        recent_age_h = round((time.time() - os.path.getmtime(recent["path"])) / 3600, 1)
+    recent_stale = recent_age_h is not None and recent_age_h > 26
+
+    # 长期底色：超过 6 天才该重写
+    prof_age_d = None
+    path = os.path.join(_data_dir(), "memory_profile.md")
+    if os.path.exists(path):
+        prof_age_d = round((time.time() - os.path.getmtime(path)) / 86400, 1)
+
+    counts = short.get("counts") or {}
+    pool = int(counts.get("pool") or 0)
+    oldest = 0
+    for it in short.get("items") or []:
+        if it.get("created"):
+            oldest = max(oldest, _days_between(it["created"][:10], today))
+
+    trash = int(counts.get("trash") or 0)
+    trash_stuck = trash > 0 and any(
+        (it.get("status") == "trash" and (it.get("days_left") is None or it.get("days_left") <= 0))
+        for it in (short.get("items") or [])
+    )
+
+    today_entries = sum(1 for e in journal if e.get("date") == today)
+
+    return {
+        "curation": {"last_day": last_day, "missed": curation_missed, "note": curation_note},
+        "recent": {"age_hours": recent_age_h, "stale": recent_stale},
+        "profile": {"age_days": prof_age_d, "stale": bool(prof_age_d is not None and prof_age_d > 6)},
+        "short": {"pool": pool, "temp": int(counts.get("temp") or 0), "trash": trash,
+                  "oldest_days": oldest, "crowded": pool > 150, "trash_stuck": trash_stuck},
+        "long": {"total": int(long_mem.get("total") or 0), "newest": (long_mem.get("recent") or [{}])[0].get("created", "")},
+        "journal": {"today": today_entries},
+    }
+
+
+def _days_between(day: str, today: str) -> int:
+    try:
+        a = time.mktime(time.strptime(day[:10], "%Y-%m-%d"))
+        b = time.mktime(time.strptime(today[:10], "%Y-%m-%d"))
+        return int(round((b - a) / 86400))
+    except (ValueError, TypeError):
+        return 0

@@ -269,6 +269,54 @@ def f_diag_and_instance():
 
 
 
+
+def f_memory_health():
+    """记忆健康：整理漏跑、档案过期、短期池积压都要能判出来。"""
+    root = build_root("health")
+    write_db(root, {"甲.txt": (100, "2026-10-27 10:00")})
+    ddir = os.path.join(root, "plugins/astrbot_plugin_edge_tts/data")
+
+    old_day = time.strftime("%Y-%m-%d", time.localtime(time.time() - 7 * 86400))
+    items = [
+        {"id": str(i), "content": f"短期{i}", "reply": "", "created": "2026-10-20 10:00",
+         "hits": 0, "status": "pool", "hold_until": 0}
+        for i in range(200)
+    ]
+    with open(os.path.join(ddir, "short_memory.json"), "w", encoding="utf-8") as f:
+        json.dump({"items": items, "last_curation_day": old_day}, f, ensure_ascii=False)
+
+    recent_path = os.path.join(ddir, "profile_recent.md")
+    with open(recent_path, "w", encoding="utf-8") as f:
+        f.write("（更新于 2026-10-20 14:53）\n\n- 旧的一条\n")
+    old = time.time() - 40 * 3600
+    os.utime(recent_path, (old, old))
+
+    prof = os.path.join(ddir, "memory_profile.md")
+    with open(prof, "w", encoding="utf-8") as f:
+        f.write("【用户是谁】\n- 测试\n")
+    old10 = time.time() - 10 * 86400
+    os.utime(prof, (old10, old10))
+
+    snap = run_check(root)
+    h = snap["memory"]["health"]
+
+    assert_(h["curation"]["missed"] is True, f"应该判出整理漏了：{h['curation']}")
+    assert_("天没有整理" in h["curation"]["note"], f"提示不对：{h['curation']['note']}")
+    assert_(h["recent"]["stale"] is True, f"最近几天档案应判为过期：{h['recent']}")
+    assert_(h["profile"]["stale"] is True, f"长期底色超过 6 天应判过期：{h['profile']}")
+    assert_(h["short"]["crowded"] is True, f"200 条应判积压：{h['short']}")
+    assert_(h["short"]["oldest_days"] >= 9, f"最久天数不对：{h['short']['oldest_days']}")
+
+    # 再验证一遍"刚整理过"的情况
+    with open(os.path.join(ddir, "short_memory.json"), "w", encoding="utf-8") as f:
+        json.dump({"items": items[:3], "last_curation_day": time.strftime("%Y-%m-%d")}, f, ensure_ascii=False)
+    os.utime(recent_path, (time.time(), time.time()))
+    os.utime(prof, (time.time(), time.time()))
+    h2 = run_check(root)["memory"]["health"]
+    assert_(h2["curation"]["missed"] is False, f"刚整理过不该报警：{h2['curation']}")
+    assert_(h2["recent"]["stale"] is False and h2["profile"]["stale"] is False, "档案不该报警")
+    assert_(h2["short"]["crowded"] is False, "3 条不该判积压")
+    return "漏整理/档案过期/池积压都能判出，正常时不误报"
 def f_journal_own_kind():
     """日记要带上他自己的 kind/importance，moment 单独成组。"""
     root = build_root("ownkind")
@@ -794,6 +842,7 @@ CASES = [
     ("F-13 新书可见", f_new_book_visible),
     ("F-14 记忆全貌", f_memory_full),
     ("F-15 日记自带分类", f_journal_own_kind),
+    ("F-16 记忆健康", f_memory_health),
 ]
 
 

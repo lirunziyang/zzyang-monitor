@@ -1017,3 +1017,20 @@ mark { background: rgba(216, 178, 115, .26); color: #ffe9c9; border-radius: 3px;
 .tag.feeling { color: #c9b0e0; background: rgba(180, 150, 210, .10); border-color: rgba(180, 150, 210, .22); }
 .tag.event { color: var(--accent); background: var(--accent-soft); border-color: var(--accent-line); }
 .tag.moment { color: var(--warm); background: var(--warm-soft); border-color: rgba(216, 178, 115, .30); }
+
+/* ---------- 记忆健康 ---------- */
+.health { display: flex; flex-direction: column; gap: 2px; }
+.health-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 0;
+  border-top: 1px solid var(--stroke);
+  font-size: 12.5px;
+}
+.health-row:first-child { border-top: 0; }
+.h-dot { width: 7px; height: 7px; border-radius: 50%; flex: none; }
+.h-dot.ok { background: var(--accent); }
+.h-dot.warn { background: var(--warm); box-shadow: 0 0 0 3px var(--warm-soft); }
+.h-label { color: var(--text-3); flex: 0 0 96px; }
+.h-value { color: var(--text-2); font-variant-numeric: tabular-nums; }

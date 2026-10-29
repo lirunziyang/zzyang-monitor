@@ -342,6 +342,20 @@ function renderMemory() {
   const parts = [];
   const card = (inner) => `<div class="card memsec">${inner}</div>`;
 
+  // 0) 记忆健康
+  const h = m.health || {};
+  if (h.curation) {
+    const rows = [];
+    const push = (ok, label, value) => rows.push(`<div class="health-row"><span class="h-dot ${ok ? "ok" : "warn"}"></span><span class="h-label">${label}</span><span class="h-value">${value}</span></div>`);
+    push(!h.curation.missed, "每晚整理", esc(h.curation.note || "—"));
+    push(!h.recent.stale, "最近几天档案", h.recent.age_hours == null ? "还没有" : `${h.recent.age_hours} 小时前`);
+    push(!h.profile.stale, "长期底色", h.profile.age_days == null ? "还没有" : `${h.profile.age_days} 天前`);
+    push(!h.short.crowded, "短期池", `${h.short.pool} 条（最久 ${h.short.oldest_days} 天）`);
+    push(!h.short.trash_stuck, "回收站", `${h.short.trash} 条`);
+    push(true, "长期记忆", `${h.long.total} 条 · 最新 ${esc(h.long.newest || "—")}`);
+    parts.push(card(`<div class="memtitle2">记忆健康</div><div class="health">${rows.join("")}</div>`));
+  }
+
   // 1) 最近几天
   const recent = m.recent || {};
   if (recent.exists && (recent.lines || []).length) {
@@ -802,6 +816,18 @@ async function uiSelfTest() {
     const n = document.querySelectorAll(".entry").length;
     if (!n) throw new Error("没有渲染出任何条目");
     return `${n} 条`;
+  });
+
+  t("记忆健康面板", () => {
+    const h = (state.snap && state.snap.memory && state.snap.memory.health) || null;
+    if (!h) return "本机没有健康数据，跳过";
+    setView("memory");
+    const rows = document.querySelectorAll(".health-row").length;
+    const text = document.querySelector(".health") ? document.querySelector(".health").textContent : "";
+    setView("journal");
+    if (rows < 4) throw new Error("健康行太少：" + rows);
+    if (!text.includes("每晚整理")) throw new Error("缺少整理状态");
+    return rows + " 行";
   });
 
   t("重要时刻置顶", () => {

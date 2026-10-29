@@ -642,6 +642,7 @@ def build_snapshot() -> dict:
     memory["recent"] = insight.read_profile_recent()
     memory["short"] = insight.read_short_memory()
     memory["long"] = insight.read_long_memory()
+    memory["health"] = insight.memory_health(memory["short"], memory["recent"], memory["long"], journal)
 
     # 活动时间线：把日记里的动作摊平
     events = []
