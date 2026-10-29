@@ -543,7 +543,7 @@ function renderJournal() {
   const showMoments = moments.length && !state.day && !state.query;
   const groups = new Map();
   for (const e of list) {
-    if (e.own_kind === "moment") continue;
+    if (showMoments && e.own_kind === "moment") continue;
     if (!groups.has(e.date)) groups.set(e.date, []);
     groups.get(e.date).push(e);
   }
@@ -1359,7 +1359,10 @@ function bind() {
 
     if (state.view !== "journal") return;
 
-    const list = filtered().slice(0, state.limit || 9999);
+    const pinnedMoments = ((state.snap && state.snap.moments) || []).length > 0 && !state.day && !state.query;
+    const list = filtered()
+      .filter((e) => !(pinnedMoments && e.own_kind === "moment"))
+      .slice(0, state.limit || 9999);
     if (!list.length) return;
     const idx = list.findIndex((e) => e.id === state.selected);
 
