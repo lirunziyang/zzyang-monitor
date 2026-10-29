@@ -327,17 +327,105 @@ function renderMemory() {
     box.innerHTML = "";
     return;
   }
-  $("memHint").textContent = "这是它自动整理的事实记录，只读展示，不是备忘录。";
+  $("memHint").textContent = "这是它自己整理的记忆，只读展示，不是备忘录。";
   $("memMeta").innerHTML = `${m.chars} 字<br>更新于 ${esc(m.updated_at || "—")}`;
-  box.innerHTML = (m.sections || [])
-    .map(
-      (sec) =>
-        `<div class="card memsec">
-          <div class="memtitle2">${esc(sec.title)}</div>
-          ${sec.lines.map((l) => `<div class="memline">${esc(l)}</div>`).join("")}
-        </div>`
-    )
-    .join("");
+
+  const parts = [];
+  const card = (inner) => `<div class="card memsec">${inner}</div>`;
+
+  // 1) 最近几天
+  const recent = m.recent || {};
+  if (recent.exists && (recent.lines || []).length) {
+    parts.push(
+      card(
+        `<div class="memtitle2">最近几天<span class="mem-sub">${esc(recent.updated_day || recent.updated_at || "")}</span></div>` +
+          recent.lines.map((l) => `<div class="memline">${esc(l)}</div>`).join("")
+      )
+    );
+  }
+
+  // 2) 短期记忆
+  const short = m.short || {};
+  if (short.exists) {
+    const c = short.counts || {};
+    const all = short.items || [];
+    const rows = all.slice(0, 20);
+    const label = { pool: "池", temp: "暂存", trash: "回收站" };
+    const items = rows
+      .map((it) => {
+        const meta = [
+          `活过 ${it.hits || 0} 次`,
+          it.created || "",
+          it.status === "temp" && it.days_left != null ? `还剩 ${it.days_left} 天` : "",
+          it.status === "trash" ? "已进回收站" : "",
+        ]
+          .filter(Boolean)
+          .join(" · ");
+        return `<div class="mem-item s-${esc(it.status)}">
+          <div class="m-text">${esc(it.content)}</div>
+          ${it.reply ? `<div class="m-reply">${esc(it.reply)}</div>` : ""}
+          <div class="m-meta">${esc(meta)}</div>
+        </div>`;
+      })
+      .join("");
+    parts.push(
+      card(
+        `<div class="memtitle2">短期记忆<span class="mem-sub">${short.total} 条</span></div>` +
+          `<div class="mem-chips">
+             <span class="mem-chip">${label.pool} ${c.pool || 0}</span>
+             <span class="mem-chip">${label.temp} ${c.temp || 0}</span>
+             <span class="mem-chip">${label.trash} ${c.trash || 0}</span>
+           </div>` +
+          items +
+          (all.length > rows.length ? `<div class="mem-more">还有 ${all.length - rows.length} 条</div>` : "")
+      )
+    );
+  }
+
+  // 3) 长期底色
+  (m.sections || []).forEach((sec) => {
+    parts.push(
+      card(
+        `<div class="memtitle2">${esc(sec.title)}</div>` +
+          sec.lines.map((l) => `<div class="memline">${esc(l)}</div>`).join("")
+      )
+    );
+  });
+
+  // 4) 长期记忆条目
+  const long = m.long || {};
+  if (long.exists && long.total) {
+    const kinds = Object.entries(long.kinds || {})
+      .map(([k, n]) => `<span class="mem-chip">${esc(k)} ${n}</span>`)
+      .join("");
+    const recentRows = (long.recent || []).slice(0, 12);
+    const topRows = (long.top || []).filter((r) => r.hits > 0).slice(0, 5);
+    parts.push(
+      card(
+        `<div class="memtitle2">长期记忆<span class="mem-sub">${long.total} 条</span></div>` +
+          `<div class="mem-chips">${kinds}</div>` +
+          recentRows
+            .map(
+              (it) =>
+                `<div class="mem-item"><div class="m-text">${esc(it.content)}</div>
+                 <div class="m-meta">${esc(it.kind || "chat")}${it.created ? " · " + esc(it.created) : ""}</div></div>`
+            )
+            .join("") +
+          (topRows.length
+            ? `<div class="mem-sub2">被想起最多的</div>` +
+              topRows
+                .map(
+                  (it) =>
+                    `<div class="mem-item"><div class="m-text">${esc(it.content)}</div>
+                     <div class="m-meta">想起 ${it.hits} 次</div></div>`
+                )
+                .join("")
+            : "")
+      )
+    );
+  }
+
+  box.innerHTML = parts.join("");
 }
 
 /* ---------------- 书库 ---------------- */

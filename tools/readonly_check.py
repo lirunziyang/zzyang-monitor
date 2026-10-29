@@ -24,18 +24,34 @@ APP = os.path.join(BASE, "app.py")
 PLUGIN_DIR = botdata.PLUGIN_DATA
 INSTANCE_DIR = botdata.BOT_ROOT
 
+_DATA_DIR = os.path.dirname(botdata.PROFILE_META)
+
 # 严格比对（内容哈希）
 STRICT = [
     botdata.JOURNAL,
     botdata.PROFILE_META,
     botdata.PLUGIN_CFG,
+    os.path.join(_DATA_DIR, "profile_recent.md"),
+    os.path.join(_DATA_DIR, "memory_profile.md"),
 ]
 # 只比元信息（这些文件会被正在运行的机器人正常写入）
 META = [
     botdata.DB,
     botdata.DB + "-wal",
     botdata.DB + "-shm",
+    os.path.join(_DATA_DIR, "short_memory.json"),
+    os.path.join(_DATA_DIR, "reading_log.jsonl"),
 ]
+# 长期记忆：目录里所有 user_*.json
+try:
+    for _n in sorted(os.listdir(os.path.join(_DATA_DIR, "long_memory"))):
+        if _n.lower().endswith(".json"):
+            META.append(os.path.join(_DATA_DIR, "long_memory", _n))
+except OSError:
+    pass
+
+STRICT = [p for p in STRICT if os.path.exists(p)]
+META = [p for p in META if os.path.exists(p)]
 
 
 def digest(path: str) -> str:

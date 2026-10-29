@@ -267,6 +267,60 @@ def f_diag_and_instance():
 
 
 
+
+def f_memory_full():
+    """记忆页三件套：最近几天 + 短期池 + 长期条目都要读出来。"""
+    root = build_root("memfull")
+    write_db(root, {"甲.txt": (100, "2026-10-27 10:00")})
+    ddir = os.path.join(root, "plugins/astrbot_plugin_edge_tts/data")
+
+    with open(os.path.join(ddir, "profile_recent.md"), "w", encoding="utf-8") as f:
+        f.write("（更新于 2026-10-29 14:53）\n\n- 他今天想通了一件事。\n- 晚上读了会儿书。\n")
+
+    sm = {
+        "items": [
+            {"id": "a", "content": "短期甲", "reply": "回甲", "created": "2026-10-29 20:00",
+             "hits": 2, "status": "pool", "hold_until": 0},
+            {"id": "b", "content": "短期乙", "reply": "回乙", "created": "2026-10-29 19:00",
+             "hits": 1, "status": "temp", "hold_until": 0},
+            {"id": "c", "content": "短期丙", "reply": "", "created": "2026-10-29 18:00",
+             "hits": 0, "status": "trash", "hold_until": 0},
+        ],
+        "last_curation_day": "2026-10-29",
+    }
+    with open(os.path.join(ddir, "short_memory.json"), "w", encoding="utf-8") as f:
+        json.dump(sm, f, ensure_ascii=False)
+
+    os.makedirs(os.path.join(ddir, "long_memory"), exist_ok=True)
+    lm = [
+        {"id": "1", "content": "长期一", "kind": "chat", "createTime": "1793000000000", "hits": 3},
+        {"id": "2", "content": "长期二", "kind": "reading", "createTime": "1793100000000", "hits": 0},
+    ]
+    with open(os.path.join(ddir, "long_memory/user_1.json"), "w", encoding="utf-8") as f:
+        json.dump(lm, f, ensure_ascii=False)
+
+    with open(os.path.join(ddir, "memory_profile.md"), "w", encoding="utf-8") as f:
+        f.write("【用户是谁】\n- 一个测试用户\n")
+
+    snap = run_check(root)
+    mem = snap["memory"]
+
+    assert_(mem["exists"], "长期档案没读出来")
+    assert_(mem["recent"]["exists"], "profile_recent.md 没读到")
+    assert_(len(mem["recent"]["lines"]) == 2, f"最近几天应有 2 条，实际 {len(mem['recent']['lines'])}")
+    assert_(mem["recent"]["updated_day"] == "2026-10-29 14:53", "更新日期没解析出来")
+
+    short = mem["short"]
+    assert_(short["exists"] and short["total"] == 3, f"短期记忆应有 3 条，实际 {short.get('total')}")
+    assert_(short["counts"]["pool"] == 1 and short["counts"]["temp"] == 1 and short["counts"]["trash"] == 1,
+            f"三态统计不对：{short['counts']}")
+    assert_(short["items"][0]["status"] == "pool", "池里的应排最前")
+
+    long = mem["long"]
+    assert_(long["exists"] and long["total"] == 2, f"长期记忆应有 2 条，实际 {long.get('total')}")
+    assert_(long["kinds"].get("chat") == 1 and long["kinds"].get("reading") == 1, f"分类统计不对：{long['kinds']}")
+    assert_(long["top"][0]["content"] == "长期一", "被想起最多的排序不对")
+    return "最近 2 条 · 短期 3 条(池/暂存/回收站) · 长期 2 条(按 kind 分类)"
 def f_new_book_visible():
     """书库里新加的书，就算还没进度，也要出现在书架上。"""
     root = build_root("newbook")
@@ -706,6 +760,7 @@ CASES = [
     ("F-11 不回退浏览器", f_no_browser_fallback),
     ("F-12 字数以进度为准", f_chars_follow_position),
     ("F-13 新书可见", f_new_book_visible),
+    ("F-14 记忆全貌", f_memory_full),
 ]
 
 

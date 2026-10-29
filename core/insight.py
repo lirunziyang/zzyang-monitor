@@ -5,9 +5,12 @@
 """
 from __future__ import annotations
 
+import json
+import math
 import os
 import re
 import sys
+import time
 from collections import Counter
 
 from . import data as botdata
@@ -209,4 +212,155 @@ def memory_profile() -> dict:
     if current["lines"]:
         sections.append(current)
     out["sections"] = sections
+    return out
+
+
+# ---------------- 记忆：最近几天 / 短期 / 长期（只读） ----------------
+
+def _neg_time(text: str) -> float:
+    """把 '2026-10-29 20:29' 变成可倒序的负数；解析不了算最早。"""
+    for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M"):
+        try:
+            return -time.mktime(time.strptime(text.strip(), fmt))
+        except (ValueError, AttributeError):
+            continue
+    return 0.0
+
+def _data_dir() -> str:
+    return os.path.dirname(botdata.PROFILE_META)
+
+
+def _mtime_text(path: str) -> str:
+    try:
+        st = os.stat(path)
+        return time.strftime("%Y-%m-%d %H:%M", time.localtime(st.st_mtime))
+    except OSError:
+        return ""
+
+
+def read_profile_recent() -> dict:
+    """最近几天（profile_recent.md），每天 21:30 刷新。"""
+    path = os.path.join(_data_dir(), "profile_recent.md")
+    out = {"exists": os.path.exists(path), "path": path, "lines": [], "chars": 0,
+           "updated_at": "", "updated_day": ""}
+    if not out["exists"]:
+        return out
+    try:
+        with open(path, "r", encoding="utf-8-sig", errors="replace") as f:
+            text = f.read()
+    except OSError:
+        out["exists"] = False
+        return out
+    out["chars"] = len(text)
+    out["updated_at"] = _mtime_text(path)
+    for raw in text.splitlines():
+        line = raw.strip()
+        if not line:
+            continue
+        m = re.match(r"^（更新于\s*(.+?)）$", line)
+        if m:
+            out["updated_day"] = m.group(1)
+            continue
+        out["lines"].append(line.lstrip("- ").strip())
+    return out
+
+
+def read_short_memory() -> dict:
+    """短期记忆：池 / 暂存 / 回收站。"""
+    path = os.path.join(_data_dir(), "short_memory.json")
+    out = {"exists": os.path.exists(path), "path": path, "counts": {}, "items": [],
+           "updated_at": "", "total": 0}
+    if not out["exists"]:
+        return out
+    try:
+        with open(path, "r", encoding="utf-8-sig", errors="replace") as f:
+            raw = json.load(f)
+    except Exception:
+        out["exists"] = False
+        return out
+    out["updated_at"] = _mtime_text(path)
+    items = raw.get("items") if isinstance(raw, dict) else raw
+    if not isinstance(items, list):
+        items = []
+    now = time.time()
+    counts = {"pool": 0, "temp": 0, "trash": 0}
+    rows = []
+    for it in items:
+        if not isinstance(it, dict):
+            continue
+        status = str(it.get("status") or "pool")
+        counts[status] = counts.get(status, 0) + 1
+        days_left = None
+        try:
+            hold = float(it.get("hold_until") or 0)
+            if hold > 0:
+                days_left = max(0, math.ceil((hold - now) / 86400))
+        except (TypeError, ValueError):
+            pass
+        rows.append({
+            "content": str(it.get("content") or "").strip(),
+            "reply": str(it.get("reply") or "").strip()[:160],
+            "created": str(it.get("created") or ""),
+            "hits": int(it.get("hits") or 0),
+            "survived": int(it.get("survived") or 0),
+            "status": status,
+            "days_left": days_left,
+        })
+    order = {"pool": 0, "temp": 1, "trash": 2}
+    rows.sort(key=lambda r: (order.get(r["status"], 9), "" if r["created"] else "", r["created"]))
+    rows.sort(key=lambda r: (order.get(r["status"], 9), _neg_time(r["created"])))
+    out["counts"] = counts
+    out["total"] = len(rows)
+    out["items"] = rows
+    return out
+
+
+def read_long_memory(limit_recent: int = 40, limit_top: int = 8) -> dict:
+    """长期记忆：只给分布 + 最近若干条 + 被想起最多的几条。"""
+    folder = os.path.join(_data_dir(), "long_memory")
+    out = {"exists": os.path.isdir(folder), "path": folder, "total": 0, "kinds": {},
+           "recent": [], "top": [], "updated_at": "", "files": 0}
+    if not out["exists"]:
+        return out
+    names = []
+    try:
+        names = [n for n in os.listdir(folder) if n.lower().endswith(".json")]
+    except OSError:
+        return out
+    out["files"] = len(names)
+    rows = []
+    for name in names:
+        p = os.path.join(folder, name)
+        try:
+            with open(p, "r", encoding="utf-8-sig", errors="replace") as f:
+                data = json.load(f)
+        except Exception:
+            continue
+        if isinstance(data, dict):
+            data = data.get("items") or data.get("memories") or []
+        if not isinstance(data, list):
+            continue
+        for it in data:
+            if not isinstance(it, dict):
+                continue
+            content = str(it.get("content") or "").strip()
+            if not content:
+                continue
+            kind = str(it.get("kind") or "chat")
+            rows.append({
+                "content": content,
+                "kind": kind,
+                "created": str(it.get("created") or it.get("createTime") or ""),
+                "hits": int(it.get("hits") or 0),
+            })
+        if not out["updated_at"]:
+            out["updated_at"] = _mtime_text(p)
+    out["total"] = len(rows)
+    kinds: dict = {}
+    for r in rows:
+        kinds[r["kind"]] = kinds.get(r["kind"], 0) + 1
+    out["kinds"] = kinds
+    by_time = sorted(rows, key=lambda r: r["created"], reverse=True)
+    out["recent"] = by_time[:limit_recent]
+    out["top"] = sorted(rows, key=lambda r: r["hits"], reverse=True)[:limit_top]
     return out

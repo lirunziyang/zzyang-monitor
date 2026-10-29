@@ -627,6 +627,10 @@ def build_snapshot() -> dict:
     history = insight.same_day_history(journal, today)
     topic_list = insight.topics(journal)
     memory = insight.memory_profile()
+    # 记忆全貌：长期底色 + 最近几天 + 短期池 + 长期条目（只读）
+    memory["recent"] = insight.read_profile_recent()
+    memory["short"] = insight.read_short_memory()
+    memory["long"] = insight.read_long_memory()
 
     # 活动时间线：把日记里的动作摊平
     events = []
