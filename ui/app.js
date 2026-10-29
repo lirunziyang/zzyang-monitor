@@ -350,7 +350,7 @@ function renderMemory() {
     push(!h.curation.missed, "每晚整理", esc(h.curation.note || "—"));
     push(!h.recent.stale, "最近几天档案", h.recent.age_hours == null ? "还没有" : `${h.recent.age_hours} 小时前`);
     push(!h.profile.stale, "长期底色", h.profile.age_days == null ? "还没有" : `${h.profile.age_days} 天前`);
-    push(!h.short.crowded, "短期池", `${h.short.pool} 条（最久 ${h.short.oldest_days} 天）`);
+    push(!h.short.crowded, "短期池", `${h.short.pool} 条 · 暂存 ${h.short.temp} 条（最久 ${h.short.oldest_days} 天）`);
     push(!h.short.trash_stuck, "回收站", `${h.short.trash} 条`);
     push(true, "长期记忆", `${h.long.total} 条 · 最新 ${esc(h.long.newest || "—")}`);
     parts.push(card(`<div class="memtitle2">记忆健康</div><div class="health">${rows.join("")}</div>`));

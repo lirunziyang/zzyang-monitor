@@ -270,6 +270,37 @@ def f_diag_and_instance():
 
 
 
+
+def f_short_status_alias():
+    """插件实际用 hold 表示暂存，要能正确归类和统计，回收站按天数判断。"""
+    root = build_root("hold")
+    write_db(root, {"甲.txt": (100, "2026-10-27 10:00")})
+    ddir = os.path.join(root, "plugins/astrbot_plugin_edge_tts/data")
+
+    old_day = time.strftime("%Y-%m-%d", time.localtime(time.time() - 10 * 86400))
+    items = [
+        {"id": "p", "content": "池里的", "created": "2026-10-29 20:00", "status": "pool", "hold_until": 0},
+        {"id": "h", "content": "暂存的", "created": "2026-10-29 19:00", "status": "hold",
+         "hold_until": time.time() + 5 * 86400},
+        {"id": "t1", "content": "今天删的", "created": "2026-10-29 18:00", "status": "trash", "hold_until": 0},
+        {"id": "t2", "content": "十天前删的", "created": old_day + " 18:00", "status": "trash", "hold_until": 0},
+    ]
+    with open(os.path.join(ddir, "short_memory.json"), "w", encoding="utf-8") as f:
+        json.dump({"items": items, "last_curation_day": time.strftime("%Y-%m-%d")}, f, ensure_ascii=False)
+
+    snap = run_check(root)
+    short = snap["memory"]["short"]
+    c = short["counts"]
+    assert_(c["pool"] == 1, f"池应为 1，实际 {c}")
+    assert_(c["temp"] == 1, f"hold 应归到暂存，实际 {c}")
+    assert_(c["trash"] == 2, f"回收站应为 2，实际 {c}")
+
+    held = [i for i in short["items"] if i["status"] == "temp"][0]
+    assert_(held["days_left"] is not None and held["days_left"] >= 4, f"剩余天数不对：{held['days_left']}")
+
+    h = snap["memory"]["health"]
+    assert_(h["short"]["trash_stuck"] is True, "十天前的回收站条目应判为过期未清")
+    return "hold→暂存，池1/暂存1/回收站2，过期判断正确"
 def f_memory_health():
     """记忆健康：整理漏跑、档案过期、短期池积压都要能判出来。"""
     root = build_root("health")
@@ -843,6 +874,7 @@ CASES = [
     ("F-14 记忆全貌", f_memory_full),
     ("F-15 日记自带分类", f_journal_own_kind),
     ("F-16 记忆健康", f_memory_health),
+    ("F-17 状态词兼容", f_short_status_alias),
 ]
 
 

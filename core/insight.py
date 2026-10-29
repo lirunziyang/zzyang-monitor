@@ -284,11 +284,15 @@ def read_short_memory() -> dict:
         items = []
     now = time.time()
     counts = {"pool": 0, "temp": 0, "trash": 0}
+    # 插件的状态词：pool（池）→ hold（暂存）→ trash（回收站）。
+    # 早期文档写的是 temp，实际实现用的是 hold，这里统一。
+    STATUS_ALIAS = {"hold": "temp", "temp": "temp", "pool": "pool", "trash": "trash"}
     rows = []
     for it in items:
         if not isinstance(it, dict):
             continue
-        status = str(it.get("status") or "pool")
+        raw_status = str(it.get("status") or "pool").strip().lower()
+        status = STATUS_ALIAS.get(raw_status, raw_status)
         counts[status] = counts.get(status, 0) + 1
         days_left = None
         try:
@@ -429,8 +433,11 @@ def memory_health(short: dict, recent: dict, long_mem: dict, journal: list) -> d
             oldest = max(oldest, _days_between(it["created"][:10], today))
 
     trash = int(counts.get("trash") or 0)
-    trash_stuck = trash > 0 and any(
-        (it.get("status") == "trash" and (it.get("days_left") is None or it.get("days_left") <= 0))
+    # 回收站里超过 7 天还在的，才算"过期没清"
+    trash_stuck = any(
+        it.get("status") == "trash"
+        and it.get("created")
+        and _days_between(it["created"][:10], today) > 7
         for it in (short.get("items") or [])
     )
 
