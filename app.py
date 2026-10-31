@@ -108,6 +108,21 @@ class Handler(SimpleHTTPRequestHandler):
                 return self._json(snap)
             except Exception as e:
                 return self._json({"ok": False, "error": f"{type(e).__name__}: {e}"}, 500)
+        if self.path.startswith("/api/memory"):
+            from urllib.parse import parse_qs, urlparse
+            q = parse_qs(urlparse(self.path).query)
+            def _int(name, dft):
+                try:
+                    return int((q.get(name) or [str(dft)])[0])
+                except Exception:
+                    return dft
+            off = max(0, _int("offset", 0))
+            lim = max(1, min(200, _int("limit", 50)))
+            lay = str((q.get("layer") or [""])[0] or "")
+            try:
+                return self._json({"ok": True, **botdata.read_memory_page(off, lim, lay)})
+            except Exception as e:
+                return self._json({"ok": False, "error": f"{type(e).__name__}: {e}"}, 500)
         if self.path.startswith("/api/health"):
             return self._json({"ok": True})
         return super().do_GET()

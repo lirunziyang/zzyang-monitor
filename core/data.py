@@ -161,58 +161,67 @@ def read_journal_detailed() -> tuple[list[dict], dict]:
     """读日记，原样返回，只做展示层的合并（不修改源文件）。"""
     out: list[dict] = []
     meta = {"missing": False, "bad_lines": 0, "total_lines": 0}
-    if not os.path.exists(JOURNAL):
+    events_path = os.path.join(os.path.dirname(JOURNAL), "events.jsonl")
+    paths = [p for p in (JOURNAL, events_path) if os.path.exists(p)]
+    if not paths:
         meta["missing"] = True
         return out, meta
     seen: dict[str, dict] = {}
-    try:
-        f = open(JOURNAL, "r", encoding="utf-8", errors="replace")
-    except OSError:
-        meta["missing"] = True
-        return out, meta
-    with f:
-        for line in f:
-            line = line.strip()
-            if not line:
-                continue
-            meta["total_lines"] += 1
-            try:
-                row = json.loads(line)
-            except Exception:
-                meta["bad_lines"] += 1
-                continue
-            content = str(row.get("content") or "").strip()
-            ts = str(row.get("time") or "").strip()
-            if not content:
-                continue
-            auto = bool(row.get("auto"))
-            key = entry_id(ts, content)
-            if key in seen:
-                seen[key]["duplicates"] += 1
-                continue
-            dt = parse_ts(ts)
-            item = {
-                "id": key,
-                "time": ts,
-                "ts": dt.timestamp() if dt else 0,
-                "date": dt.strftime("%Y-%m-%d") if dt else "未知日期",
-                "clock": dt.strftime("%H:%M") if dt else "",
-                "content": content,
-                "kind": classify(content, auto),
-                # 他自己的分类与重要度（2026-10-29 起插件会写入）
-                "own_kind": str(row.get("kind") or "").strip(),
-                "importance": int(row.get("importance")) if str(row.get("importance") or "").isdigit() else 0,
-                "span_start": str(row.get("span_start") or "").strip(),
-                "span_end": str(row.get("span_end") or "").strip(),
-                "own_id": str(row.get("id") or "").strip(),
-                "auto": auto,
-                "duplicates": 1,
-                "chars": len(content),
-            }
-            seen[key] = item
-            out.append(item)
+    for path in paths:
+        try:
+            f = open(path, "r", encoding="utf-8", errors="replace")
+        except OSError:
+            continue
+        with f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                meta["total_lines"] += 1
+                try:
+                    row = json.loads(line)
+                except Exception:
+                    meta["bad_lines"] += 1
+                    continue
+                content = str(row.get("content") or "").strip()
+                ts = str(row.get("time") or "").strip()
+                if not content:
+                    continue
+                auto = bool(row.get("auto"))
+                key = entry_id(ts, content)
+                if key in seen:
+                    seen[key]["duplicates"] += 1
+                    continue
+                dt = parse_ts(ts)
+                item = {
+                    "id": key,
+                    "time": ts,
+                    "ts": dt.timestamp() if dt else 0,
+                    "date": dt.strftime("%Y-%m-%d") if dt else "未知日期",
+                    "clock": dt.strftime("%H:%M") if dt else "",
+                    "content": content,
+                    "kind": classify(content, auto),
+                    # 他自己的分类与重要度（2026-10-29 起插件会写入）
+                    "own_kind": str(row.get("kind") or "").strip(),
+                    "importance": int(row.get("importance")) if str(row.get("importance") or "").isdigit() else 0,
+                    "span_start": str(row.get("span_start") or "").strip(),
+                    "span_end": str(row.get("span_end") or "").strip(),
+                    "own_id": str(row.get("id") or "").strip(),
+                    "source": str(row.get("source") or ("extracted" if path.endswith("events.jsonl") else "self")),
+                    "auto": auto,
+                    "duplicates": 1,
+                    "chars": len(content),
+                }
+                seen[key] = item
+                out.append(item)
     out.sort(key=lambda x: (x["ts"], x["time"]), reverse=True)
     return out, meta
+
+
+def read_memory_page(offset: int = 0, limit: int = 50, layer: str = "") -> dict:
+    """给前端翻页看全部长期记忆用。"""
+    from . import insight
+    return insight.read_long_memory_page(offset, limit, layer)
 
 
 def read_journal() -> list[dict]:
@@ -642,6 +651,25 @@ def build_snapshot() -> dict:
     memory["recent"] = insight.read_profile_recent()
     memory["short"] = insight.read_short_memory()
     memory["long"] = insight.read_long_memory()
+    # 好友 / 群的记忆单独一块，不和主人自己的记忆混在一起
+    memory["friends"] = insight.read_friend_memory()
+    # 蒸馏状态：游标 + 还没蒸馏的条数（游标存在 preferences 里）
+    _cursor = 0
+    for _k, _v in (prefs or {}).items():
+        if str(_k).startswith("astrbot_plugin_edge_tts:distill_ts:"):
+            try:
+                _cursor = int((_v or {}).get("val") or 0)
+            except Exception:
+                _cursor = 0
+            break
+    _raw_times = memory["long"].pop("raw_times", []) or []
+    memory["distill"] = {
+        "cursor": _cursor,
+        "undistilled": sum(1 for t in _raw_times if int(t or 0) > _cursor),
+        "last_day": str(((prefs or {}).get("astrbot_plugin_edge_tts:distill_owner_day") or {}).get("val") or ""),
+        "cursor_text": (time.strftime("%Y-%m-%d %H:%M", time.localtime(_cursor / 1000)) if _cursor else ""),
+    }
+    memory["guest_profiles"] = insight.read_guest_profiles()
     memory["health"] = insight.memory_health(memory["short"], memory["recent"], memory["long"], journal)
 
     # 活动时间线：把日记里的动作摊平

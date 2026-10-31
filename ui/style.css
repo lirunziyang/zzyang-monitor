@@ -1034,3 +1034,13 @@ mark { background: rgba(216, 178, 115, .26); color: #ffe9c9; border-radius: 3px;
 .h-dot.warn { background: var(--warm); box-shadow: 0 0 0 3px var(--warm-soft); }
 .h-label { color: var(--text-3); flex: 0 0 96px; }
 .h-value { color: var(--text-2); font-variant-numeric: tabular-nums; }
+
+.mem-chip.mini {
+  font-size: 10px;
+  padding: 1px 6px;
+  margin-left: 8px;
+  color: var(--warm);
+  background: var(--warm-soft);
+  border-color: rgba(216, 178, 115, .3);
+  vertical-align: middle;
+}

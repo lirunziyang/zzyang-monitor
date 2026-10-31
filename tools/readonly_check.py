@@ -41,6 +41,7 @@ META = [
     botdata.DB + "-shm",
     os.path.join(_DATA_DIR, "short_memory.json"),
     os.path.join(_DATA_DIR, "reading_log.jsonl"),
+    os.path.join(_DATA_DIR, "events.jsonl"),
 ]
 # 长期记忆：目录里所有 user_*.json
 try:
@@ -66,6 +67,28 @@ for _extra in (
                     META.append(_p)
         except OSError:
             pass
+
+STRICT = [p for p in STRICT if os.path.exists(p)]
+
+# 机器人新增的运维文件：备份日志、看护日志、备用模型 key、每日备份包
+# fallback_key.txt 只比对大小/时间，绝不读取内容
+_QBOT = os.path.dirname(os.path.dirname(os.path.dirname(botdata.BOT_ROOT)))
+for _p in (
+    os.path.join(_QBOT, "tools", "backup.log"),
+    os.path.join(_QBOT, "tools", "watchdog.log"),
+    os.path.join(_DATA_DIR, "fallback_key.txt"),
+):
+    if os.path.isfile(_p):
+        META.append(_p)
+
+_BDIR = os.path.join(_QBOT, "backup", "daily")
+if os.path.isdir(_BDIR):
+    try:
+        for _n in sorted(os.listdir(_BDIR)):
+            if _n.lower().endswith(".zip"):
+                META.append(os.path.join(_BDIR, _n))
+    except OSError:
+        pass
 
 STRICT = [p for p in STRICT if os.path.exists(p)]
 META = [p for p in META if os.path.exists(p)]
@@ -214,6 +237,25 @@ def _journal_texts() -> tuple[set, set]:
                 content = str(row.get("content") or "").strip()
                 if content:
                     raw.add(content)
+    except OSError:
+        pass
+
+    # 事件单独存 events.jsonl，界面上和日记一起展示，也要能追回原文
+    try:
+        events_path = os.path.join(os.path.dirname(botdata.JOURNAL), "events.jsonl")
+        if os.path.exists(events_path):
+            with open(events_path, "r", encoding="utf-8", errors="replace") as f:
+                for line in f:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    try:
+                        row = json.loads(line)
+                    except Exception:
+                        continue
+                    content = str(row.get("content") or "").strip()
+                    if content:
+                        raw.add(content)
     except OSError:
         pass
 

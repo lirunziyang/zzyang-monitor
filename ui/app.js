@@ -352,6 +352,22 @@ function renderMemory() {
     push(!h.profile.stale, "长期底色", h.profile.age_days == null ? "还没有" : `${h.profile.age_days} 天前`);
     push(!h.short.crowded, "短期池", `${h.short.pool} 条 · 暂存 ${h.short.temp} 条（最久 ${h.short.oldest_days} 天）`);
     push(!h.short.trash_stuck, "回收站", `${h.short.trash} 条`);
+    if (h.keep) {
+      push(true, "今日保留", `${h.keep.today} / ${h.keep.max} 条` + (h.keep.at_limit ? "（已到上限）" : "") + (h.keep.exempt ? ` · 豁免 ${h.keep.exempt} 条` : ""));
+    }
+    if (h.backup) {
+      push(h.backup.exists && !h.backup.stale, "每日备份",
+        h.backup.exists
+          ? `${h.backup.count} 份 · 最近 ${esc(h.backup.latest || "—")}（${h.backup.size_mb} MB，${h.backup.age_hours} 小时前）`
+          : "还没有备份");
+    }
+    if (h.watchdog) {
+      push(h.watchdog.exists, "看护",
+        h.watchdog.exists ? `最近重启 ${esc(h.watchdog.last || "—")} · 今天 ${h.watchdog.restarts_today} 次` : "没有看护日志");
+    }
+    if (h.fallback) {
+      push(h.fallback.exists, "备用模型", h.fallback.exists ? "已配置" : "未配置");
+    }
     push(true, "长期记忆", `${h.long.total} 条 · 最新 ${esc(h.long.newest || "—")}`);
     parts.push(card(`<div class="memtitle2">记忆健康</div><div class="health">${rows.join("")}</div>`));
   }
@@ -376,19 +392,25 @@ function renderMemory() {
     const label = { pool: "池", temp: "暂存", trash: "回收站" };
     const items = rows
       .map((it) => {
-        const meta = [
-          `活过 ${it.hits || 0} 次`,
-          it.created || "",
-          it.status === "temp" && it.days_left != null ? `还剩 ${it.days_left} 天` : "",
-          it.status === "trash" ? "已进回收站" : "",
-        ]
-          .filter(Boolean)
-          .join(" · ");
-        return `<div class="mem-item s-${esc(it.status)}">
-          <div class="m-text">${esc(it.content)}</div>
-          ${it.reply ? `<div class="m-reply">${esc(it.reply)}</div>` : ""}
-          <div class="m-meta">${esc(meta)}</div>
-        </div>`;
+          const meta = [
+            `活过 ${it.hits || 0} 次`,
+            it.kept_on ? `保留于 ${it.kept_on.slice(5)}` : "",
+            it.status === "temp" && it.days_left != null ? `还剩 ${it.days_left} 天` : "",
+            it.status === "trash" && it.days_left != null
+              ? `还剩 ${it.days_left} 天删除`
+              : it.status === "trash"
+              ? "已进回收站"
+              : "",
+            it.created || "",
+          ]
+            .filter(Boolean)
+            .join(" · ");
+          const exemptTag = it.exempt ? `<span class="mem-chip mini">豁免</span>` : "";
+          return `<div class="mem-item s-${esc(it.status)}">
+            <div class="m-text">${esc(it.content)}${exemptTag}</div>
+            ${it.reply ? `<div class="m-reply">${esc(it.reply)}</div>` : ""}
+            <div class="m-meta">${esc(meta)}</div>
+          </div>`;
       })
       .join("");
     parts.push(
@@ -448,7 +470,96 @@ function renderMemory() {
     );
   }
 
+  // 5) 好友记忆（分区存放，不参与你和它的对话）
+  const fr = m.friends || {};
+  if (fr.exists && fr.total) {
+    const frRows = (fr.items || [])
+      .map(
+        (it) =>
+          `<div class="mem-item"><div class="m-text">${esc(it.content)}</div>
+           <div class="m-meta">${esc(it.who)}${it.created ? " · " + esc(it.created) : ""}</div></div>`
+      )
+      .join("");
+    parts.push(
+      card(
+        `<div class="memtitle2">好友记忆<span class="mem-sub">${fr.people} 人 · ${fr.total} 条</span></div>` +
+          `<div class="mem-sub2">别人跟它说过的话，单独存档，不进你和它的对话。</div>` +
+          frRows
+      )
+    );
+  }
+
+  // 6) 记忆分层 + 蒸馏状态
+  const lx = long.layers || {};
+  const ds = m.distill || {};
+  if (long.exists && long.total) {
+    const layerChips = ["raw", "summary", "fact"]
+      .map((k) => `<span class="mem-chip">${k} ${lx[k] || 0}</span>`)
+      .join("");
+    const warn = (ds.undistilled || 0) > 120;
+    parts.push(
+      card(
+        `<div class="memtitle2">记忆分层与蒸馏<span class="mem-sub">${esc(ds.last_day || "还没跑过")}</span></div>` +
+          `<div class="mem-chips">${layerChips}</div>` +
+          `<div class="health-row"><span class="h-dot ${warn ? "warn" : "ok"}"></span><span class="h-label">未蒸馏</span><span class="h-value">${ds.undistilled || 0} 条</span></div>` +
+          `<div class="health-row"><span class="h-dot ok"></span><span class="h-label">蒸馏游标</span><span class="h-value">${esc(ds.cursor_text || "—")}</span></div>`
+      )
+    );
+  }
+
+  // 7) 好友档案
+  const gp = m.guest_profiles || [];
+  if (gp.length) {
+    const rows = gp
+      .map(
+        (it) =>
+          `<div class="mem-item"><div class="m-text">${esc(it.preview || "")}</div>
+           <div class="m-meta">${esc(it.uid)} · ${it.chars} 字 · ${esc(it.updated_at || "")}</div></div>`
+      )
+      .join("");
+    parts.push(
+      card(
+        `<div class="memtitle2">好友档案<span class="mem-sub">${gp.length} 人 · 每人上限 500 字</span></div>` + rows
+      )
+    );
+  }
+
+  // 8) 全部记忆翻页查看
+  if (long.exists && long.total) {
+    parts.push(
+      card(
+        `<div class="memtitle2">全部长期记忆<span class="mem-sub">${long.total} 条</span></div>` +
+          `<button id="memAllBtn" style="margin:6px 0;padding:4px 10px;cursor:pointer">按时间翻看全部</button>` +
+          `<div id="memAllList"></div>`
+      )
+    );
+  }
+
   box.innerHTML = parts.join("");
+
+  const _btn = $("memAllBtn");
+  if (_btn) {
+    _btn.onclick = async () => {
+      const list = $("memAllList");
+      list.innerHTML = "读取中…";
+      try {
+        const r = await fetch("/api/memory?offset=0&limit=200");
+        const j = await r.json();
+        if (!j.ok) throw new Error(j.error || "读取失败");
+        const rows = (j.items || [])
+          .map(
+            (it) =>
+              `<div class="mem-item"><div class="m-text">${esc(it.content)}</div>
+               <div class="m-meta">${esc(it.layer || "raw")} · ${esc(it.created || "")}${it.hits ? " · 想起 " + it.hits + " 次" : ""}</div></div>`
+          )
+          .join("");
+        list.innerHTML =
+          `<div class="mem-sub2">共 ${j.total} 条，显示前 ${(j.items || []).length} 条（最新在前）</div>` + rows;
+      } catch (e) {
+        list.textContent = "读取失败：" + (e && e.message ? e.message : e);
+      }
+    };
+  }
 }
 
 /* ---------------- 书库 ---------------- */
@@ -825,8 +936,10 @@ async function uiSelfTest() {
     const rows = document.querySelectorAll(".health-row").length;
     const text = document.querySelector(".health") ? document.querySelector(".health").textContent : "";
     setView("journal");
-    if (rows < 4) throw new Error("健康行太少：" + rows);
+    if (rows < 8) throw new Error("健康行太少：" + rows);
     if (!text.includes("每晚整理")) throw new Error("缺少整理状态");
+    if (!text.includes("每日备份")) throw new Error("缺少备份状态");
+    if (!text.includes("看护")) throw new Error("缺查看护状态");
     return rows + " 行";
   });
 

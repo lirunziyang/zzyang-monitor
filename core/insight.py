@@ -230,6 +230,30 @@ def _data_dir() -> str:
     return os.path.dirname(botdata.PROFILE_META)
 
 
+def _qbot_dir() -> str:
+    """qbot 根目录（备份、日志都在这下面）。测试可用 ZZYANG_QBOT 覆盖。"""
+    override = os.environ.get("ZZYANG_QBOT")
+    if override:
+        return override
+    return os.path.dirname(os.path.dirname(os.path.dirname(botdata.BOT_ROOT)))
+
+
+def _backup_dir() -> str:
+    return os.path.join(_qbot_dir(), "backup", "daily")
+
+
+def _backup_log() -> str:
+    return os.path.join(_qbot_dir(), "tools", "backup.log")
+
+
+def _watchdog_log() -> str:
+    return os.path.join(_qbot_dir(), "tools", "watchdog.log")
+
+
+def _fallback_key() -> str:
+    return os.path.join(_data_dir(), "fallback_key.txt")
+
+
 def _mtime_text(path: str) -> str:
     try:
         st = os.stat(path)
@@ -296,11 +320,14 @@ def read_short_memory() -> dict:
         counts[status] = counts.get(status, 0) + 1
         days_left = None
         try:
-            hold = float(it.get("hold_until") or 0)
-            if hold > 0:
-                days_left = max(0, math.ceil((hold - now) / 86400))
+            # 暂存看 hold_until，回收站看 trash_until（新字段）
+            deadline = it.get("hold_until") if status == "temp" else it.get("trash_until")
+            deadline = float(deadline or 0)
+            if deadline > 0:
+                days_left = max(0, math.ceil((deadline - now) / 86400))
         except (TypeError, ValueError):
             pass
+
         rows.append({
             "content": str(it.get("content") or "").strip(),
             "reply": str(it.get("reply") or "").strip()[:160],
@@ -309,6 +336,9 @@ def read_short_memory() -> dict:
             "survived": int(it.get("survived") or 0),
             "status": status,
             "days_left": days_left,
+            # 新字段：豁免（不参与每晚重判）与被保留的日期
+            "exempt": bool(it.get("exempt")),
+            "kept_on": str(it.get("kept_on") or "")[:10],
         })
     order = {"pool": 0, "temp": 1, "trash": 2}
     rows.sort(key=lambda r: (order.get(r["status"], 9), "" if r["created"] else "", r["created"]))
@@ -339,7 +369,8 @@ def read_long_memory(limit_recent: int = 40, limit_top: int = 8) -> dict:
     """长期记忆：只给分布 + 最近若干条 + 被想起最多的几条。"""
     folder = os.path.join(_data_dir(), "long_memory")
     out = {"exists": os.path.isdir(folder), "path": folder, "total": 0, "kinds": {},
-           "recent": [], "top": [], "updated_at": "", "files": 0}
+           "recent": [], "top": [], "updated_at": "", "files": 0,
+           "layers": {}, "raw_times": []}
     if not out["exists"]:
         return out
     names = []
@@ -349,6 +380,7 @@ def read_long_memory(limit_recent: int = 40, limit_top: int = 8) -> dict:
         return out
     out["files"] = len(names)
     rows = []
+    raw_times = []
     for name in names:
         p = os.path.join(folder, name)
         try:
@@ -367,9 +399,16 @@ def read_long_memory(limit_recent: int = 40, limit_top: int = 8) -> dict:
             if not content:
                 continue
             kind = str(it.get("kind") or "chat")
+            layer = str(it.get("layer") or "raw")
+            if layer == "raw":
+                try:
+                    raw_times.append(int(it.get("createTime") or 0))
+                except Exception:
+                    pass
             rows.append({
                 "content": content,
                 "kind": kind,
+                "layer": layer,
                 "created": _epoch_text(it.get("created") or it.get("createTime")),
                 "hits": int(it.get("hits") or 0),
             })
@@ -380,13 +419,134 @@ def read_long_memory(limit_recent: int = 40, limit_top: int = 8) -> dict:
     for r in rows:
         kinds[r["kind"]] = kinds.get(r["kind"], 0) + 1
     out["kinds"] = kinds
+    layers: dict = {}
+    for r in rows:
+        layers[r["layer"]] = layers.get(r["layer"], 0) + 1
+    out["layers"] = layers
+    out["raw_times"] = raw_times
     by_time = sorted(rows, key=lambda r: r["created"], reverse=True)
     out["recent"] = by_time[:limit_recent]
     out["top"] = sorted(rows, key=lambda r: r["hits"], reverse=True)[:limit_top]
     return out
 
+def read_long_memory_page(offset: int = 0, limit: int = 50, layer: str = "") -> dict:
+    """翻页看全部长期记忆（只读主人目录，不含好友/群）。"""
+    folder = os.path.join(_data_dir(), "long_memory")
+    rows = []
+    if os.path.isdir(folder):
+        try:
+            names = sorted(os.listdir(folder))
+        except OSError:
+            names = []
+        for name in names:
+            if not name.lower().endswith(".json"):
+                continue
+            p = os.path.join(folder, name)
+            try:
+                with open(p, "r", encoding="utf-8-sig", errors="replace") as f:
+                    data = json.load(f)
+            except Exception:
+                continue
+            if not isinstance(data, list):
+                continue
+            for it in data:
+                if not isinstance(it, dict):
+                    continue
+                c = str(it.get("content") or "").strip()
+                if not c:
+                    continue
+                rows.append({
+                    "content": c,
+                    "layer": str(it.get("layer") or "raw"),
+                    "kind": str(it.get("kind") or "chat"),
+                    "created": _epoch_text(it.get("createTime") or it.get("created")),
+                    "hits": int(it.get("hits") or 0),
+                })
+    if layer:
+        rows = [r for r in rows if r["layer"] == layer]
+    rows.sort(key=lambda r: r["created"], reverse=True)
+    off = max(0, int(offset or 0))
+    lim = max(1, min(200, int(limit or 50)))
+    return {"total": len(rows), "offset": off, "limit": lim, "items": rows[off:off + lim]}
+
+def read_friend_memory(limit: int = 20) -> dict:
+    """好友 / 群的记忆：分区后放在 long_memory/guests 与 long_memory/groups。
+
+    单独成一块，是为了不跟主人自己的记忆混在同一个列表里——
+    以前所有 json 都在 long_memory 根目录，扫一遍就全混在一起了。
+    """
+    base = os.path.join(_data_dir(), "long_memory")
+    out = {"exists": False, "total": 0, "people": 0, "items": []}
+    rows = []
+    files = 0
+    for sub in ("guests", "groups"):
+        folder = os.path.join(base, sub)
+        if not os.path.isdir(folder):
+            continue
+        out["exists"] = True
+        try:
+            names = sorted(os.listdir(folder))
+        except OSError:
+            continue
+        for name in names:
+            if not name.lower().endswith(".json"):
+                continue
+            p = os.path.join(folder, name)
+            try:
+                with open(p, "r", encoding="utf-8-sig", errors="replace") as f:
+                    data = json.load(f)
+            except Exception:
+                continue
+            if isinstance(data, dict):
+                data = data.get("items") or data.get("memories") or []
+            if not isinstance(data, list):
+                continue
+            files += 1
+            who = name[:-5]
+            for it in data:
+                if not isinstance(it, dict):
+                    continue
+                content = str(it.get("content") or "").strip()
+                if not content:
+                    continue
+                rows.append({
+                    "who": who,
+                    "sub": sub,
+                    "content": content,
+                    "created": _epoch_text(it.get("created") or it.get("createTime")),
+                })
+    out["people"] = files
+    out["total"] = len(rows)
+    rows.sort(key=lambda r: r["created"], reverse=True)
+    out["items"] = rows[:limit]
+    return out
+
+def read_guest_profiles(limit: int = 20) -> list[dict]:
+    """好友档案：每人一份不超过 500 字的客观印象。"""
+    folder = os.path.join(_data_dir(), "guest_profile")
+    out = []
+    if not os.path.isdir(folder):
+        return out
+    try:
+        names = sorted(n for n in os.listdir(folder) if n.lower().endswith(".md"))
+    except OSError:
+        return out
+    for name in names[:limit]:
+        p = os.path.join(folder, name)
+        try:
+            text = open(p, encoding="utf-8", errors="replace").read()
+        except Exception:
+            continue
+        out.append({
+            "uid": name[:-3],
+            "chars": len(text.strip()),
+            "updated_at": _mtime_text(p),
+            "preview": text.strip()[:80],
+        })
+    return out
+
 def memory_health(short: dict, recent: dict, long_mem: dict, journal: list) -> dict:
-    """记忆健康：整理有没有跑、档案多久没刷、短期池是否积压。只读推断。"""
+    """记忆健康：整理、档案、短期池、长期增长，外加备份与看护。只读推断。"""
     now = time.localtime()
     today = time.strftime("%Y-%m-%d", now)
     yesterday = time.strftime("%Y-%m-%d", time.localtime(time.time() - 86400))
@@ -401,7 +561,7 @@ def memory_health(short: dict, recent: dict, long_mem: dict, journal: list) -> d
         last_day = ""
 
     if not last_day:
-        curation_missed = after_curation  # 今天还没到点就不算漏
+        curation_missed = after_curation
         curation_note = "还没记录过整理时间"
     elif last_day < yesterday:
         curation_missed = True
@@ -427,19 +587,31 @@ def memory_health(short: dict, recent: dict, long_mem: dict, journal: list) -> d
 
     counts = short.get("counts") or {}
     pool = int(counts.get("pool") or 0)
+    items = short.get("items") or []
     oldest = 0
-    for it in short.get("items") or []:
+    for it in items:
         if it.get("created"):
             oldest = max(oldest, _days_between(it["created"][:10], today))
 
     trash = int(counts.get("trash") or 0)
-    # 回收站里超过 7 天还在的，才算"过期没清"
-    trash_stuck = any(
-        it.get("status") == "trash"
-        and it.get("created")
-        and _days_between(it["created"][:10], today) > 7
-        for it in (short.get("items") or [])
-    )
+    # 回收站过期：有 trash_until 就看它，没有才退回 created+7 天
+    trash_stuck = False
+    for it in items:
+        if it.get("status") != "trash":
+            continue
+        left = it.get("days_left")
+        if left is not None:
+            if left <= 0:
+                trash_stuck = True
+                break
+        elif it.get("created") and _days_between(it["created"][:10], today) > 7:
+            trash_stuck = True
+            break
+
+    # 今天保留了几条（插件每天最多留 daily_keep_max 条）
+    kept_today = sum(1 for it in items if it.get("kept_on") == today)
+    exempt_count = sum(1 for it in items if it.get("exempt"))
+    keep_max = 10
 
     today_entries = sum(1 for e in journal if e.get("date") == today)
 
@@ -449,9 +621,77 @@ def memory_health(short: dict, recent: dict, long_mem: dict, journal: list) -> d
         "profile": {"age_days": prof_age_d, "stale": bool(prof_age_d is not None and prof_age_d > 6)},
         "short": {"pool": pool, "temp": int(counts.get("temp") or 0), "trash": trash,
                   "oldest_days": oldest, "crowded": pool > 150, "trash_stuck": trash_stuck},
-        "long": {"total": int(long_mem.get("total") or 0), "newest": (long_mem.get("recent") or [{}])[0].get("created", "")},
+        "keep": {"today": kept_today, "max": keep_max, "at_limit": kept_today >= keep_max,
+                 "exempt": exempt_count},
+        "backup": _backup_health(),
+        "watchdog": _watchdog_health(),
+        "fallback": {"exists": os.path.isfile(_fallback_key())},
+        "long": {"total": int(long_mem.get("total") or 0),
+                 "newest": (long_mem.get("recent") or [{}])[0].get("created", "")},
         "journal": {"today": today_entries},
     }
+
+
+def _backup_health() -> dict:
+    """每日备份：看备份目录里最新的 zip 和它的年龄。只看文件名/大小/时间，不打开。"""
+    out = {"exists": False, "count": 0, "latest": "", "updated_at": "", "age_hours": None,
+           "size_mb": None, "stale": False}
+    folder = _backup_dir()
+    try:
+        names = [n for n in os.listdir(folder) if n.lower().endswith(".zip")]
+    except OSError:
+        return out
+    out["exists"] = True
+    out["count"] = len(names)
+    if not names:
+        return out
+    latest = max(names)
+    full = os.path.join(folder, latest)
+    try:
+        st = os.stat(full)
+        out["latest"] = latest
+        out["updated_at"] = time.strftime("%Y-%m-%d %H:%M", time.localtime(st.st_mtime))
+        out["age_hours"] = round((time.time() - st.st_mtime) / 3600, 1)
+        out["size_mb"] = round(st.st_size / 1024 / 1024, 1)
+        out["stale"] = out["age_hours"] > 30
+    except OSError:
+        pass
+    return out
+
+
+def _watchdog_health() -> dict:
+    """看护任务：读 watchdog.log 最后一条 restarted 的时间。只读日志尾部。"""
+    out = {"exists": False, "last": "", "minutes_since": None, "restarts_today": 0}
+    log = _watchdog_log()
+    if not os.path.exists(log):
+        return out
+    out["exists"] = True
+    today = time.strftime("%Y-%m-%d")
+    last_ts = None
+    try:
+        with open(log, "r", encoding="utf-8", errors="replace") as f:
+            lines = f.readlines()[-200:]
+    except OSError:
+        return out
+    for line in lines:
+        text = line.strip()
+        if not text:
+            continue
+        stamp = text.split(" ")[0]
+        if stamp.startswith(today):
+            out["restarts_today"] += 1
+        try:
+            last_ts = stamp
+        except Exception:
+            pass
+    if last_ts:
+        out["last"] = last_ts.replace("T", " ")[:16]
+        try:
+            dt = time.mktime(time.strptime(last_ts[:19].replace("T", " "), "%Y-%m-%d %H:%M:%S"))
+            out["minutes_since"] = int((time.time() - dt) / 60)
+        except (ValueError, TypeError):
+            pass
+    return out
 
 
 def _days_between(day: str, today: str) -> int:

@@ -301,6 +301,74 @@ def f_short_status_alias():
     h = snap["memory"]["health"]
     assert_(h["short"]["trash_stuck"] is True, "十天前的回收站条目应判为过期未清")
     return "hold→暂存，池1/暂存1/回收站2，过期判断正确"
+
+def f_backup_and_keep():
+    """新功能监测：今日保留、豁免、备份、看护、备用模型、回收站期限。"""
+    root = build_root("newfeat")
+    write_db(root, {"甲.txt": (100, "2026-10-27 10:00")})
+    ddir = os.path.join(root, "plugins/astrbot_plugin_edge_tts/data")
+    today = time.strftime("%Y-%m-%d")
+
+    items = [
+        {"id": "1", "content": "今天留下的", "created": today + " 20:00", "status": "pool",
+         "hits": 1, "survived": 1, "kept_on": today, "exempt": True, "hold_until": 0},
+        {"id": "2", "content": "过期的回收站", "created": "2026-10-20 10:00", "status": "trash",
+         "hits": 0, "survived": 0, "trash_until": time.time() - 86400, "hold_until": 0},
+        {"id": "3", "content": "暂存的", "created": today + " 19:00", "status": "hold",
+         "hits": 2, "survived": 1, "hold_until": time.time() + 5 * 86400},
+    ]
+    with open(os.path.join(ddir, "short_memory.json"), "w", encoding="utf-8") as f:
+        json.dump({"items": items, "last_curation_day": today}, f, ensure_ascii=False)
+
+    with open(os.path.join(ddir, "fallback_key.txt"), "w", encoding="utf-8") as f:
+        f.write("# comment\nfake-key-for-test\n")
+
+    qbot = os.path.join(TMP, "qb", "newfeat")
+    bdir = os.path.join(qbot, "backup", "daily")
+    tdir = os.path.join(qbot, "tools")
+    os.makedirs(bdir, exist_ok=True)
+    os.makedirs(tdir, exist_ok=True)
+    with open(os.path.join(bdir, "2026-10-31.zip"), "wb") as f:
+        f.write(b"PK\x05\x06" + b"\x00" * 18)
+    with open(os.path.join(tdir, "backup.log"), "w", encoding="utf-8") as f:
+        f.write("2026-10-31T22:40:02+08:00 backup ok\n")
+    with open(os.path.join(tdir, "watchdog.log"), "w", encoding="utf-8") as f:
+        f.write(today + "T22:23:04+08:00 restarted\n")
+        f.write(today + "T22:37:04+08:00 restarted\n")
+
+    snap = run_check(root, {"ZZYANG_QBOT": qbot})
+    h = snap["memory"]["health"]
+
+    assert_(h["keep"]["today"] == 1, f"今日保留应为 1：{h['keep']}")
+    assert_(h["keep"]["exempt"] == 1, f"豁免应为 1：{h['keep']}")
+    assert_(h["keep"]["max"] == 10, "上限应为 10")
+    assert_(h["keep"]["at_limit"] is False, "只留 1 条不该判到上限")
+
+    assert_(h["backup"]["exists"] is True, "没读到备份目录")
+    assert_(h["backup"]["count"] == 1, f"备份数不对：{h['backup']}")
+    assert_(h["backup"]["latest"] == "2026-10-31.zip", f"最新备份不对：{h['backup']}")
+    assert_(h["backup"]["stale"] is False, "刚备份不该判过期")
+
+    assert_(h["watchdog"]["exists"] is True, "没读到看护日志")
+    assert_(h["watchdog"]["restarts_today"] == 2, f"重启次数不对：{h['watchdog']}")
+
+    assert_(h["fallback"]["exists"] is True, "备用模型应显示已配置")
+    assert_(h["short"]["trash_stuck"] is True, "回收站已过期应报警")
+
+    trash = [i for i in snap["memory"]["short"]["items"] if i["status"] == "trash"][0]
+    assert_(trash["days_left"] == 0, f"回收站剩余天数应为 0：{trash['days_left']}")
+
+    kept = [i for i in snap["memory"]["short"]["items"] if i["status"] == "pool"][0]
+    assert_(kept["exempt"] is True and kept["kept_on"] == today, f"豁免/保留日期丢了：{kept}")
+
+    # 备份超过 30 小时应判过期
+    old = time.time() - 40 * 3600
+    os.utime(os.path.join(bdir, "2026-10-31.zip"), (old, old))
+    h2 = run_check(root, {"ZZYANG_QBOT": qbot})["memory"]["health"]
+    assert_(h2["backup"]["stale"] is True, f"40 小时前的备份应判过期：{h2['backup']}")
+    assert_(h2["backup"]["age_hours"] >= 39, "间隔算错了")
+    return "保留/豁免/备份/看护/备用模型/回收站期限 全部读出"
+
 def f_memory_health():
     """记忆健康：整理漏跑、档案过期、短期池积压都要能判出来。"""
     root = build_root("health")
@@ -875,6 +943,7 @@ CASES = [
     ("F-15 日记自带分类", f_journal_own_kind),
     ("F-16 记忆健康", f_memory_health),
     ("F-17 状态词兼容", f_short_status_alias),
+    ("F-18 备份与保留", f_backup_and_keep),
 ]
 
 
